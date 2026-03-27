@@ -36,6 +36,7 @@ categorical_columns:
 
 
 n_optuna_trials: 100
+early_stopping_rounds: 50
 optuna_storage: sqlite:///models/optuna_studies.db
 optuna_study_name: xgb_backlink_pricing
 

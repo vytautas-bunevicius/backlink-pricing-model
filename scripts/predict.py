@@ -13,6 +13,9 @@ import numpy as np
 import pandas as pd
 
 from backlink_pricing_model.core.config import load_config, resolve_path
+from backlink_pricing_model.preprocessing.data_imputation import (
+    impute_metrics_by_domain,
+)
 from backlink_pricing_model.preprocessing.feature_engineering import (
     add_log_traffic,
     add_temporal_features,
@@ -41,6 +44,7 @@ def prepare_input(
     Returns:
         Feature-engineered DataFrame ready for prediction.
     """
+    df = impute_metrics_by_domain(df)
     df = normalize_country(df)
     df = add_tld_feature(df)
     df = add_log_traffic(df)
@@ -50,11 +54,10 @@ def prepare_input(
     for col, le in encoders.items():
         known_classes = set(le.classes_)
         col_values = df[col].fillna("unknown")
-        # Map unseen labels to "unknown" if it exists in the encoder.
-        if "unknown" in known_classes:
-            col_values = col_values.apply(
-                lambda v, kc=known_classes: v if v in kc else "unknown"
-            )
+        # Map unseen labels to "unknown" (class is guaranteed by training).
+        col_values = col_values.apply(
+            lambda v, kc=known_classes: v if v in kc else "unknown"
+        )
         df[f"{col}_encoded"] = le.transform(col_values)
 
     return df
@@ -128,10 +131,13 @@ def main(
 
     x = df[feature_cols]
 
-    # Predict (log price) and convert back to USD.
-    log_price_pred = model.predict(x)
-    df["predicted_log_price"] = log_price_pred
-    df["predicted_price_usd"] = np.expm1(log_price_pred)
+    raw_pred = model.predict(x)
+    target = cfg.get("target", "log_price")
+    if target == "log_price":
+        df["predicted_log_price"] = raw_pred
+        df["predicted_price_usd"] = np.expm1(raw_pred)
+    else:
+        df["predicted_price_usd"] = raw_pred
 
     # Summary.
     logger.info(

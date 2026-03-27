@@ -15,9 +15,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import (
     mean_absolute_error,
-    mean_absolute_percentage_error,
-    root_mean_squared_error,
     r2_score,
+    root_mean_squared_error,
 )
 
 from backlink_pricing_model.core.config import load_config, resolve_path
@@ -37,6 +36,28 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+def safe_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Compute MAPE safely by skipping zero-denominator targets."""
+    y_true_arr = np.asarray(y_true)
+    y_pred_arr = np.asarray(y_pred)
+    mask = y_true_arr != 0
+    if not mask.any():
+        return float("nan")
+    return float(
+        np.mean(np.abs((y_true_arr[mask] - y_pred_arr[mask]) / y_true_arr[mask]))
+    )
+
+
+def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+    """Compute regression metrics."""
+    return {
+        "mae": float(mean_absolute_error(y_true, y_pred)),
+        "rmse": float(root_mean_squared_error(y_true, y_pred)),
+        "r2": float(r2_score(y_true, y_pred)),
+        "mape": safe_mape(y_true, y_pred),
+    }
 
 
 @click.command()
@@ -97,17 +118,21 @@ def main(
     # Predict.
     y_pred = model.predict(x_test)
 
-    # Metrics.
-    metrics = {
-        "mae": float(mean_absolute_error(y_test, y_pred)),
-        "rmse": float(root_mean_squared_error(y_test, y_pred)),
-        "r2": float(r2_score(y_test, y_pred)),
-        "mape": float(mean_absolute_percentage_error(y_test, y_pred)),
-    }
+    metrics = {"log_scale": compute_metrics(y_test.values, y_pred)}
+    target_is_log = target == "log_price"
+    if target_is_log:
+        y_test_plot = np.expm1(y_test.values)
+        y_pred_plot = np.expm1(y_pred)
+        metrics["usd_scale"] = compute_metrics(y_test_plot, y_pred_plot)
+    else:
+        y_test_plot = y_test.values
+        y_pred_plot = y_pred
 
     logger.info("Evaluation results:")
-    for name, value in metrics.items():
-        logger.info("  %s: %.4f", name.upper(), value)
+    for metric_group, values in metrics.items():
+        logger.info("  %s", metric_group)
+        for name, value in values.items():
+            logger.info("    %s: %.4f", name.upper(), value)
 
     # Save metrics.
     metrics_path = resolve_path(
@@ -119,10 +144,10 @@ def main(
 
     # Plots.
     fig_pva = plot_predictions_vs_actuals(
-        y_test.values, y_pred, title="XGBoost: predictions vs actuals"
+        y_test_plot, y_pred_plot, title="XGBoost: predictions vs actuals (USD)"
     )
     fig_res = plot_residuals(
-        y_test.values, y_pred, title="XGBoost: residual analysis"
+        y_test_plot, y_pred_plot, title="XGBoost: residual analysis (USD)"
     )
 
     if hasattr(model, "feature_importances_"):

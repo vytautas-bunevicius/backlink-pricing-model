@@ -9,7 +9,6 @@ Usage:
 import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 
 import click
 import joblib
@@ -19,9 +18,8 @@ import optuna
 import pandas as pd
 from sklearn.metrics import (
     mean_absolute_error,
-    mean_absolute_percentage_error,
-    root_mean_squared_error,
     r2_score,
+    root_mean_squared_error,
 )
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBRegressor
@@ -35,7 +33,6 @@ from backlink_pricing_model.preprocessing.data_loading import (
     save_processed,
 )
 from backlink_pricing_model.preprocessing.feature_engineering import (
-    add_price_ratio,
     add_temporal_features,
 )
 
@@ -48,48 +45,66 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def safe_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Compute MAPE safely by skipping zero-denominator targets."""
+    y_true_arr = np.asarray(y_true)
+    y_pred_arr = np.asarray(y_pred)
+    mask = y_true_arr != 0
+    if not mask.any():
+        return float("nan")
+    return float(np.mean(np.abs((y_true_arr[mask] - y_pred_arr[mask]) / y_true_arr[mask])))
+
+
 def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
-    """Compute regression metrics.
-
-    Args:
-        y_true: Actual values.
-        y_pred: Predicted values.
-
-    Returns:
-        Dict of metric name to value.
-    """
+    """Compute regression metrics."""
     return {
         "mae": float(mean_absolute_error(y_true, y_pred)),
         "rmse": float(root_mean_squared_error(y_true, y_pred)),
         "r2": float(r2_score(y_true, y_pred)),
-        "mape": float(mean_absolute_percentage_error(y_true, y_pred)),
+        "mape": safe_mape(y_true, y_pred),
     }
 
 
-def prepare_features(
-    df: pd.DataFrame, cfg: dict
-) -> tuple[pd.DataFrame, dict[str, LabelEncoder]]:
-    """Impute, engineer, and encode features.
-
-    Args:
-        df: Cleaned DataFrame from preprocessing.
-        cfg: Training configuration.
-
-    Returns:
-        Tuple of (feature-engineered DataFrame, label encoders dict).
-    """
+def prepare_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Impute and derive non-leaky features before split."""
     df = impute_metrics_by_domain(df)
-    df = add_price_ratio(df)
     df = add_temporal_features(df)
+    return df
 
+
+def fit_label_encoders(
+    train_df: pd.DataFrame,
+    categorical_columns: list[str],
+) -> dict[str, LabelEncoder]:
+    """Fit encoders using train split only (prevents leakage)."""
     encoders: dict[str, LabelEncoder] = {}
-    for col in cfg.get("categorical_columns", []):
+    for col in categorical_columns:
+        if col not in train_df.columns:
+            continue
         le = LabelEncoder()
-        df[f"{col}_encoded"] = le.fit_transform(df[col].fillna("unknown"))
+        values = train_df[col].fillna("unknown").astype(str)
+        # Force unknown class to exist so inference can map unseen labels safely.
+        fit_values = pd.concat([values, pd.Series(["unknown"])], ignore_index=True)
+        le.fit(fit_values)
         encoders[col] = le
         logger.info("Encoded '%s': %d classes", col, len(le.classes_))
+    return encoders
 
-    return df, encoders
+
+def apply_label_encoders(
+    df: pd.DataFrame,
+    encoders: dict[str, LabelEncoder],
+) -> pd.DataFrame:
+    """Apply train-fitted label encoders with unseen->unknown mapping."""
+    result = df.copy()
+    for col, le in encoders.items():
+        if col not in result.columns:
+            continue
+        values = result[col].fillna("unknown").astype(str)
+        known = set(le.classes_)
+        values = values.where(values.isin(known), "unknown")
+        result[f"{col}_encoded"] = le.transform(values)
+    return result
 
 
 def create_xgb_objective(
@@ -99,20 +114,9 @@ def create_xgb_objective(
     y_val: pd.Series,
     search_space: dict,
     random_state: int,
+    early_stopping_rounds: int,
 ) -> callable:
-    """Create an Optuna objective function for XGBoost.
-
-    Args:
-        x_train: Training features.
-        y_train: Training target.
-        x_val: Validation features.
-        y_val: Validation target.
-        search_space: Hyperparameter search ranges.
-        random_state: Random seed.
-
-    Returns:
-        Optuna objective callable.
-    """
+    """Create an Optuna objective function for XGBoost."""
 
     def objective(trial: optuna.Trial) -> float:
         params = {
@@ -149,6 +153,7 @@ def create_xgb_objective(
             y_train,
             eval_set=[(x_val, y_val)],
             verbose=False,
+            early_stopping_rounds=early_stopping_rounds,
         )
         pred = model.predict(x_val)
         return float(root_mean_squared_error(y_val, pred))
@@ -157,11 +162,7 @@ def create_xgb_objective(
 
 
 def setup_mlflow(cfg: dict) -> None:
-    """Configure MLflow tracking from config.
-
-    Args:
-        cfg: Training configuration dict.
-    """
+    """Configure MLflow tracking from config."""
     tracking_uri = cfg.get("mlflow_tracking_uri", "mlruns")
     tracking_path = resolve_path(tracking_uri)
     tracking_path.mkdir(parents=True, exist_ok=True)
@@ -194,6 +195,8 @@ def main(config_path: str, trials: int | None) -> None:
 
     random_state = cfg.get("random_state", 42)
     n_trials = trials or cfg.get("n_optuna_trials", 100)
+    target_is_log = cfg.get("target", "final_price") == "log_price"
+    early_stopping_rounds = int(cfg.get("early_stopping_rounds", 50))
 
     # Setup MLflow.
     setup_mlflow(cfg)
@@ -205,19 +208,17 @@ def main(config_path: str, trials: int | None) -> None:
     logger.info("Loaded %d rows", len(df))
 
     # Feature engineering.
-    df, encoders = prepare_features(df, cfg)
+    df = prepare_features(df)
 
-    # Build feature matrix (keep domain for grouped split).
+    # Build modeling frame (keep domain for grouped split).
     feature_cols = cfg["feature_columns"]
     target = cfg["target"]
-    keep_cols = [*feature_cols, target, "domain"]
-    available = [c for c in keep_cols if c in df.columns]
-    df_model = df[available].dropna(subset=[*feature_cols, target])
-    logger.info(
-        "Modeling dataset: %d rows, %d features",
-        len(df_model),
-        len(feature_cols),
-    )
+    raw_cat_cols = cfg.get("categorical_columns", [])
+
+    required_for_split = [*raw_cat_cols, *feature_cols, target, "domain"]
+    available = [c for c in required_for_split if c in df.columns]
+    df_model = df[available].dropna(subset=[target])
+    logger.info("Modeling dataset: %d rows", len(df_model))
 
     # Domain-grouped 3-way split: train / val (for HPO) / test (held out).
     train_split, val_split, test_split = domain_grouped_split(
@@ -227,6 +228,17 @@ def main(config_path: str, trials: int | None) -> None:
         random_state=random_state,
         domain_col="domain",
     )
+
+    # Fit encoders on train split only, then apply everywhere.
+    encoders = fit_label_encoders(train_split, raw_cat_cols)
+    train_split = apply_label_encoders(train_split, encoders)
+    val_split = apply_label_encoders(val_split, encoders)
+    test_split = apply_label_encoders(test_split, encoders)
+
+    # Final feature matrix.
+    train_split = train_split.dropna(subset=[*feature_cols, target])
+    val_split = val_split.dropna(subset=[*feature_cols, target])
+    test_split = test_split.dropna(subset=[*feature_cols, target])
 
     x_train = train_split[feature_cols]
     y_train = train_split[target]
@@ -272,25 +284,36 @@ def main(config_path: str, trials: int | None) -> None:
         y_val,
         cfg["xgb_search_space"],
         random_state,
+        early_stopping_rounds,
     )
     study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
 
-    logger.info("Best RMSE: %.4f", study.best_value)
+    logger.info("Best RMSE (val): %.4f", study.best_value)
     logger.info("Best params: %s", study.best_params)
 
-    # Train final model with best params (val for early stopping).
+    # Retrain final model on train+val only (test remains untouched).
+    x_train_full = pd.concat([x_train, x_val], axis=0)
+    y_train_full = pd.concat([y_train, y_val], axis=0)
+
     best_model = XGBRegressor(
         **study.best_params, random_state=random_state, n_jobs=-1
     )
-    best_model.fit(
-        x_train, y_train, eval_set=[(x_val, y_val)], verbose=False
-    )
+    best_model.fit(x_train_full, y_train_full, verbose=False)
 
     # Evaluate on held-out test set (never seen during training or HPO).
     y_pred = best_model.predict(x_test)
-    metrics = compute_metrics(y_test.values, y_pred)
-    for name, value in metrics.items():
-        logger.info("  %s: %.4f", name.upper(), value)
+    metrics = {"log_scale": compute_metrics(y_test.values, y_pred)}
+
+    if target_is_log:
+        y_test_usd = np.expm1(y_test.values)
+        y_pred_usd = np.expm1(y_pred)
+        metrics["usd_scale"] = compute_metrics(y_test_usd, y_pred_usd)
+
+    logger.info("Evaluation results on test set:")
+    for metric_group, values in metrics.items():
+        logger.info("  %s", metric_group)
+        for name, value in values.items():
+            logger.info("    %s: %.4f", name.upper(), value)
 
     # Save artifacts.
     model_dir = resolve_path(cfg.get("model_dir", "models"))
@@ -314,6 +337,7 @@ def main(config_path: str, trials: int | None) -> None:
         "best_params": study.best_params,
         "metrics": metrics,
         "train_rows": len(x_train),
+        "val_rows": len(x_val),
         "test_rows": len(x_test),
         "features": feature_cols,
     }
@@ -324,7 +348,13 @@ def main(config_path: str, trials: int | None) -> None:
     metrics_path = model_dir / cfg.get(
         "metrics_filename", "metrics_summary.csv"
     )
-    pd.DataFrame([metrics]).to_csv(metrics_path, index=False)
+    pd.DataFrame([
+        {
+            "split": "test",
+            **{f"log_{k}": v for k, v in metrics["log_scale"].items()},
+            **({f"usd_{k}": v for k, v in metrics.get("usd_scale", {}).items()}),
+        }
+    ]).to_csv(metrics_path, index=False)
 
     # Log everything to MLflow.
     with mlflow.start_run(run_name=f"xgb_{n_trials}trials"):
@@ -336,8 +366,12 @@ def main(config_path: str, trials: int | None) -> None:
         mlflow.log_param("train_rows", len(x_train))
         mlflow.log_param("val_rows", len(x_val))
         mlflow.log_param("test_rows", len(x_test))
+        mlflow.log_param("early_stopping_rounds", early_stopping_rounds)
+        mlflow.log_param("final_fit", "train_plus_val")
 
-        mlflow.log_metrics(metrics)
+        mlflow.log_metrics({f"log_{k}": v for k, v in metrics["log_scale"].items()})
+        if "usd_scale" in metrics:
+            mlflow.log_metrics({f"usd_{k}": v for k, v in metrics["usd_scale"].items()})
 
         mlflow.log_artifact(str(model_path))
         mlflow.log_artifact(str(encoders_path))

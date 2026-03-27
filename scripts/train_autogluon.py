@@ -39,7 +39,6 @@ from backlink_pricing_model.preprocessing.auto_features import (
     save_feature_descriptions,
 )
 from backlink_pricing_model.preprocessing.feature_engineering import (
-    add_price_ratio,
     add_temporal_features,
 )
 
@@ -162,7 +161,6 @@ def main(
 
     # Feature engineering (same as manual pipeline).
     df = impute_metrics_by_domain(df)
-    df = add_price_ratio(df)
     df = add_temporal_features(df)
 
     # Prepare AutoGluon data with raw categoricals (keep domain for split).
