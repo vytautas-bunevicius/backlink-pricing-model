@@ -94,6 +94,7 @@ models/*.onnx
 models/*.json
 models/*.csv
 models/*.db
+models/autogluon/
 
 # MLflow
 mlruns/

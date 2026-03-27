@@ -59,6 +59,9 @@ notebook = [
     "nbconvert>=7.17",
     "notebook>=7.5",
 ]
+autogluon = [
+    "autogluon.tabular[all]>=1.2",
+]
 extraction = [
     "supabase>=2",
     "pydantic-settings>=2.7",
@@ -78,6 +81,7 @@ backlink-preprocess = "scripts.preprocess:main"
 backlink-train = "scripts.train:main"
 backlink-evaluate = "scripts.evaluate:main"
 backlink-predict = "scripts.predict:main"
+backlink-train-ag = "scripts.train_autogluon:main"
 
 [dependency-groups]
 dev = [

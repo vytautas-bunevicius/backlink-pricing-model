@@ -1,0 +1,279 @@
+"""CLI script: train with AutoGluon TabularPredictor.
+
+AutoGluon auto-stacks XGBoost, LightGBM, CatBoost, Random Forest, Neural Net,
+and weighted ensembles. It handles categorical encoding natively and performs
+internal hyperparameter optimization.
+
+Usage:
+    python -m scripts.train_autogluon
+    python -m scripts.train_autogluon --config configs/training.yaml
+    python -m scripts.train_autogluon --time-limit 600
+    python -m scripts.train_autogluon --preset best_quality
+"""
+
+import json
+import logging
+from datetime import datetime, timezone
+
+import click
+import joblib
+import mlflow
+import pandas as pd
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    r2_score,
+    root_mean_squared_error,
+)
+
+from backlink_pricing_model.core.config import load_config, resolve_path
+from backlink_pricing_model.preprocessing.data_imputation import (
+    impute_metrics_by_domain,
+)
+from backlink_pricing_model.preprocessing.data_loading import save_processed
+from backlink_pricing_model.preprocessing.feature_engineering import (
+    add_price_ratio,
+    add_temporal_features,
+)
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+
+def compute_metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
+    """Compute regression metrics.
+
+    Args:
+        y_true: Actual values.
+        y_pred: Predicted values.
+
+    Returns:
+        Dict of metric name to value.
+    """
+    return {
+        "mae": float(mean_absolute_error(y_true, y_pred)),
+        "rmse": float(root_mean_squared_error(y_true, y_pred)),
+        "r2": float(r2_score(y_true, y_pred)),
+        "mape": float(mean_absolute_percentage_error(y_true, y_pred)),
+    }
+
+
+def prepare_autogluon_data(
+    df: pd.DataFrame, ag_cfg: dict, target: str
+) -> pd.DataFrame:
+    """Prepare data for AutoGluon with raw categoricals.
+
+    AutoGluon handles categorical encoding natively and often achieves
+    better results with raw string categories than label-encoded integers.
+
+    Args:
+        df: Cleaned DataFrame.
+        ag_cfg: AutoGluon config section.
+        target: Target column name.
+
+    Returns:
+        DataFrame with feature columns + target, NaN rows dropped.
+    """
+    feature_cols = ag_cfg["feature_columns"]
+    cols = [*feature_cols, target]
+    available = [c for c in cols if c in df.columns]
+    missing = set(cols) - set(available)
+    if missing:
+        logger.warning("Missing columns: %s", missing)
+
+    return df[available].dropna()
+
+
+def setup_mlflow(cfg: dict) -> None:
+    """Configure MLflow tracking.
+
+    Args:
+        cfg: Training configuration dict.
+    """
+    tracking_uri = cfg.get("mlflow_tracking_uri", "mlruns")
+    tracking_path = resolve_path(tracking_uri)
+    tracking_path.mkdir(parents=True, exist_ok=True)
+    mlflow.set_tracking_uri(f"file://{tracking_path}")
+
+    experiment_name = cfg.get("mlflow_experiment_name", "backlink-pricing")
+    mlflow.set_experiment(experiment_name)
+
+
+@click.command()
+@click.option(
+    "--config",
+    "config_path",
+    default="configs/training.yaml",
+    help="Path to training config YAML.",
+)
+@click.option(
+    "--time-limit",
+    "time_limit_override",
+    default=None,
+    type=int,
+    help="Override time_limit in seconds.",
+)
+@click.option(
+    "--preset",
+    "preset_override",
+    default=None,
+    type=str,
+    help="Override preset (best_quality, high_quality, medium_quality).",
+)
+def main(
+    config_path: str,
+    time_limit_override: int | None,
+    preset_override: str | None,
+) -> None:
+    """Train with AutoGluon TabularPredictor."""
+    from autogluon.tabular import TabularPredictor
+
+    cfg = load_config(config_path)
+    ag_cfg = cfg.get("autogluon", {})
+    logger.info("Loaded config: %s", config_path)
+
+    target = cfg["target"]
+    preset = preset_override or ag_cfg.get("preset", "best_quality")
+    time_limit = time_limit_override or ag_cfg.get("time_limit", 3600)
+    eval_metric = ag_cfg.get("eval_metric", "root_mean_squared_error")
+    save_dir = str(resolve_path(ag_cfg.get("save_dir", "models/autogluon")))
+    do_refit = ag_cfg.get("refit_full", True)
+
+    # Setup MLflow.
+    setup_mlflow(cfg)
+
+    # Load and prepare data.
+    processed_path = resolve_path(cfg["processed_data"])
+    logger.info("Loading data from %s", processed_path)
+    df = pd.read_parquet(processed_path, engine="pyarrow")
+    logger.info("Loaded %d rows", len(df))
+
+    # Feature engineering (same as manual pipeline).
+    df = impute_metrics_by_domain(df)
+    df = add_price_ratio(df)
+    df = add_temporal_features(df)
+
+    # Prepare AutoGluon data with raw categoricals.
+    df_model = prepare_autogluon_data(df, ag_cfg, target)
+    logger.info("Modeling dataset: %d rows", len(df_model))
+
+    # Train/test split.
+    test_size = cfg.get("test_size", 0.2)
+    random_state = cfg.get("random_state", 42)
+    test_df = df_model.sample(frac=test_size, random_state=random_state)
+    train_df = df_model.drop(test_df.index)
+    logger.info("Train: %d | Test: %d", len(train_df), len(test_df))
+
+    # Save splits for reproducibility.
+    save_processed(train_df, "train_df_autogluon", subdir="engineered")
+    save_processed(test_df, "test_df_autogluon", subdir="engineered")
+
+    # Train AutoGluon.
+    logger.info(
+        "Starting AutoGluon: preset=%s, time_limit=%ds, metric=%s",
+        preset,
+        time_limit,
+        eval_metric,
+    )
+    predictor = TabularPredictor(
+        label=target,
+        eval_metric=eval_metric,
+        problem_type="regression",
+        path=save_dir,
+        verbosity=2,
+    )
+    predictor.fit(
+        train_data=train_df,
+        time_limit=time_limit,
+        presets=preset,
+    )
+
+    # Leaderboard.
+    leaderboard = predictor.leaderboard(test_df, silent=True)
+    logger.info("Leaderboard:\n%s", leaderboard.to_string())
+
+    # Best model evaluation.
+    y_test = test_df[target]
+    y_pred = predictor.predict(test_df)
+    metrics = compute_metrics(y_test, y_pred)
+    best_model = predictor.model_best
+    logger.info("Best model: %s", best_model)
+    for name, value in metrics.items():
+        logger.info("  %s: %.4f", name.upper(), value)
+
+    # Refit on full data for production.
+    if do_refit:
+        logger.info("Refitting best model on 100%% of data...")
+        refit_map = predictor.refit_full()
+        refit_model = refit_map.get(best_model, best_model)
+        logger.info("Refit model: %s", refit_model)
+
+    # Feature importance.
+    try:
+        importance = predictor.feature_importance(test_df, silent=True)
+        logger.info("Feature importance:\n%s", importance.to_string())
+    except Exception:
+        logger.warning("Could not compute feature importance")
+        importance = None
+
+    # Save metadata.
+    model_dir = resolve_path(cfg.get("model_dir", "models"))
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    metadata = {
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "config": config_path,
+        "method": "autogluon",
+        "preset": preset,
+        "time_limit": time_limit,
+        "eval_metric": eval_metric,
+        "best_model": best_model,
+        "metrics": metrics,
+        "train_rows": len(train_df),
+        "test_rows": len(test_df),
+        "features": ag_cfg["feature_columns"],
+        "leaderboard_top5": leaderboard.head().to_dict(orient="records"),
+    }
+    metadata_path = model_dir / "autogluon_metadata.json"
+    with metadata_path.open("w") as f:
+        json.dump(metadata, f, indent=2, default=str)
+
+    # Save leaderboard CSV.
+    leaderboard_path = model_dir / "autogluon_leaderboard.csv"
+    leaderboard.to_csv(leaderboard_path, index=False)
+
+    # Log to MLflow.
+    with mlflow.start_run(run_name=f"autogluon_{preset}_{time_limit}s"):
+        mlflow.log_param("method", "autogluon")
+        mlflow.log_param("preset", preset)
+        mlflow.log_param("time_limit", time_limit)
+        mlflow.log_param("eval_metric", eval_metric)
+        mlflow.log_param("best_model", best_model)
+        mlflow.log_param("n_features", len(ag_cfg["feature_columns"]))
+        mlflow.log_param("train_rows", len(train_df))
+        mlflow.log_param("test_rows", len(test_df))
+
+        mlflow.log_metrics(metrics)
+
+        mlflow.log_artifact(str(metadata_path))
+        mlflow.log_artifact(str(leaderboard_path))
+        mlflow.log_artifact(config_path)
+
+        logger.info(
+            "Logged run to MLflow: %s", mlflow.active_run().info.run_id
+        )
+
+    logger.info("AutoGluon training complete")
+    logger.info("Model saved to: %s", save_dir)
+    logger.info(
+        "Load with: TabularPredictor.load('%s')", save_dir
+    )
+
+
+if __name__ == "__main__":
+    main()

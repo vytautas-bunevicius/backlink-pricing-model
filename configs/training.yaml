@@ -32,12 +32,11 @@ categorical_columns:
   - tld
   - country
 
-# Optuna
+
 n_optuna_trials: 100
 optuna_storage: sqlite:///models/optuna_studies.db
 optuna_study_name: xgb_backlink_pricing
 
-# XGBoost search space
 xgb_search_space:
   n_estimators: [100, 1000]
   max_depth: [3, 12]
@@ -48,11 +47,30 @@ xgb_search_space:
   reg_lambda: [1.0e-8, 10.0]
   min_child_weight: [1, 10]
 
-# MLflow
+
+autogluon:
+  preset: best_quality
+  time_limit: 3600          # seconds (1 hour); increase for better results
+  eval_metric: root_mean_squared_error
+  # AutoGluon handles categoricals natively — pass raw tld/country, not encoded
+  feature_columns:
+    - dr
+    - cf
+    - tf
+    - log_traffic
+    - tld
+    - country
+    - year
+    - month
+    - quarter
+  refit_full: true           # retrain best model on 100% data for production
+  save_dir: models/autogluon
+
+
 mlflow_tracking_uri: mlruns
 mlflow_experiment_name: backlink-pricing
 
-# Output
+
 model_dir: models
 model_filename: xgb_backlink_pricing.joblib
 metrics_filename: metrics_summary.csv
