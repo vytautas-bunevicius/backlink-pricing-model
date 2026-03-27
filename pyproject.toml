@@ -10,7 +10,7 @@ name = "backlink-pricing-model"
 version = "0.1.0"
 description = "Backlink pricing prediction model using Ahrefs and Majestic SEO metrics"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 authors = [
     { name = "Vytautas Bunevicius", email = "vytautas@bunevicius.com" }
 ]
@@ -23,6 +23,7 @@ classifiers = [
     "License :: OSI Approved :: The Unlicense (Unlicense)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
@@ -34,7 +35,6 @@ dependencies = [
     "xgboost>=2.1",
     "lightgbm>=4.5",
     "optuna>=4",
-    "shap>=0.51",
     "joblib>=1.4",
     "pyarrow>=18",
     "plotly>=6.1.1",
@@ -50,6 +50,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+interpretability = [
+    "shap>=0.51; python_version < '3.14'",
+]
 notebook = [
     "ipykernel>=7.2",
     "ipython>=9.11",

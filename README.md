@@ -45,11 +45,20 @@ backlink-pricing-model/
 git clone https://github.com/vytautas-bunevicius/backlink-pricing-model.git
 cd backlink-pricing-model
 
+# Python 3.12/3.13 is required (3.14 wheels are not available for all deps)
+uv venv --python 3.13 .venv
+
 # Install everything
 make setup
 
 # Or manually with uv
 uv sync --extra dev --extra notebook --extra extraction
+```
+
+Optional interpretability extras (SHAP):
+
+```bash
+uv sync --extra interpretability
 ```
 
 ## Reproducible pipeline

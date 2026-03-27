@@ -13,7 +13,7 @@ Usage:
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import click
 import mlflow
@@ -26,17 +26,18 @@ from sklearn.metrics import (
 )
 
 from backlink_pricing_model.core.config import load_config, resolve_path
-from backlink_pricing_model.preprocessing.data_imputation import (
-    impute_metrics_by_domain,
-)
-from backlink_pricing_model.preprocessing.data_loading import (
-    domain_grouped_split,
-    save_processed,
-)
 from backlink_pricing_model.preprocessing.auto_features import (
     apply_openfe,
     fit_openfe,
     save_feature_descriptions,
+)
+from backlink_pricing_model.preprocessing.data_imputation import (
+    apply_domain_metric_imputer,
+    fit_domain_metric_imputer,
+)
+from backlink_pricing_model.preprocessing.data_loading import (
+    domain_grouped_split,
+    save_processed,
 )
 from backlink_pricing_model.preprocessing.feature_engineering import (
     add_temporal_features,
@@ -160,7 +161,6 @@ def main(
     logger.info("Loaded %d rows", len(df))
 
     # Feature engineering (same as manual pipeline).
-    df = impute_metrics_by_domain(df)
     df = add_temporal_features(df)
 
     # Prepare AutoGluon data with raw categoricals (keep domain for split).
@@ -179,6 +179,12 @@ def main(
         random_state=random_state,
         domain_col="domain",
     )
+
+    # Fit metric imputer on train split only, then apply to all splits.
+    metric_imputer = fit_domain_metric_imputer(train_df)
+    train_df = apply_domain_metric_imputer(train_df, metric_imputer)
+    val_df = apply_domain_metric_imputer(val_df, metric_imputer)
+    test_df = apply_domain_metric_imputer(test_df, metric_imputer)
 
     # Drop domain column before modeling.
     for split in (train_df, val_df, test_df):
@@ -303,7 +309,7 @@ def main(
     model_dir.mkdir(parents=True, exist_ok=True)
 
     metadata = {
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "timestamp": datetime.now(tz=UTC).isoformat(),
         "config": config_path,
         "method": "autogluon",
         "preset": preset,

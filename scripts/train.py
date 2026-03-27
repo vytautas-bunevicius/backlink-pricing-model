@@ -8,7 +8,7 @@ Usage:
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import click
 import joblib
@@ -26,7 +26,8 @@ from xgboost import XGBRegressor
 
 from backlink_pricing_model.core.config import load_config, resolve_path
 from backlink_pricing_model.preprocessing.data_imputation import (
-    impute_metrics_by_domain,
+    apply_domain_metric_imputer,
+    fit_domain_metric_imputer,
 )
 from backlink_pricing_model.preprocessing.data_loading import (
     domain_grouped_split,
@@ -66,10 +67,8 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 
 
 def prepare_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Impute and derive non-leaky features before split."""
-    df = impute_metrics_by_domain(df)
-    df = add_temporal_features(df)
-    return df
+    """Derive non-leaky features before split."""
+    return add_temporal_features(df)
 
 
 def fit_label_encoders(
@@ -229,6 +228,12 @@ def main(config_path: str, trials: int | None) -> None:
         domain_col="domain",
     )
 
+    # Fit metric imputer on train split only, then apply everywhere.
+    metric_imputer = fit_domain_metric_imputer(train_split)
+    train_split = apply_domain_metric_imputer(train_split, metric_imputer)
+    val_split = apply_domain_metric_imputer(val_split, metric_imputer)
+    test_split = apply_domain_metric_imputer(test_split, metric_imputer)
+
     # Fit encoders on train split only, then apply everywhere.
     encoders = fit_label_encoders(train_split, raw_cat_cols)
     train_split = apply_label_encoders(train_split, encoders)
@@ -329,9 +334,13 @@ def main(config_path: str, trials: int | None) -> None:
     joblib.dump(encoders, encoders_path)
     logger.info("Saved encoders to %s", encoders_path)
 
+    imputer_path = model_dir / "metric_imputer.joblib"
+    joblib.dump(metric_imputer, imputer_path)
+    logger.info("Saved metric imputer to %s", imputer_path)
+
     # Save metrics + metadata.
     metadata = {
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "timestamp": datetime.now(tz=UTC).isoformat(),
         "config": config_path,
         "n_trials": n_trials,
         "best_params": study.best_params,
@@ -375,6 +384,7 @@ def main(config_path: str, trials: int | None) -> None:
 
         mlflow.log_artifact(str(model_path))
         mlflow.log_artifact(str(encoders_path))
+        mlflow.log_artifact(str(imputer_path))
         mlflow.log_artifact(str(metadata_path))
         mlflow.log_artifact(config_path)
 

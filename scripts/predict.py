@@ -14,6 +14,7 @@ import pandas as pd
 
 from backlink_pricing_model.core.config import load_config, resolve_path
 from backlink_pricing_model.preprocessing.data_imputation import (
+    apply_domain_metric_imputer,
     impute_metrics_by_domain,
 )
 from backlink_pricing_model.preprocessing.feature_engineering import (
@@ -33,18 +34,25 @@ logger = logging.getLogger(__name__)
 
 
 def prepare_input(
-    df: pd.DataFrame, encoders: dict
+    df: pd.DataFrame,
+    encoders: dict,
+    metric_imputer: dict | None = None,
 ) -> pd.DataFrame:
     """Apply the same feature pipeline used during training.
 
     Args:
         df: Raw input DataFrame with domain, dr, cf, tf, etc.
         encoders: Label encoders from training.
+        metric_imputer: Optional train-fitted metric imputer artifact.
 
     Returns:
         Feature-engineered DataFrame ready for prediction.
     """
-    df = impute_metrics_by_domain(df)
+    if metric_imputer:
+        df = apply_domain_metric_imputer(df, metric_imputer)
+    else:
+        # Backward-compatibility when artifact is missing.
+        df = impute_metrics_by_domain(df)
     df = normalize_country(df)
     df = add_tld_feature(df)
     df = add_log_traffic(df)
@@ -53,7 +61,7 @@ def prepare_input(
     # Encode categoricals using training encoders.
     for col, le in encoders.items():
         known_classes = set(le.classes_)
-        col_values = df[col].fillna("unknown")
+        col_values = df[col].fillna("unknown").astype(str)
         # Map unseen labels to "unknown" (class is guaranteed by training).
         col_values = col_values.apply(
             lambda v, kc=known_classes: v if v in kc else "unknown"
@@ -112,6 +120,18 @@ def main(
     logger.info("Loading encoders from %s", encoders_path)
     encoders = joblib.load(encoders_path)
 
+    imputer_path = resolve_path(f"{cfg.get('model_dir', 'models')}/metric_imputer.joblib")
+    metric_imputer = None
+    if imputer_path.exists():
+        logger.info("Loading metric imputer from %s", imputer_path)
+        metric_imputer = joblib.load(imputer_path)
+    else:
+        logger.warning(
+            "Metric imputer artifact not found at %s; "
+            "falling back to per-batch domain imputation",
+            imputer_path,
+        )
+
     # Load input.
     input_file = resolve_path(input_path)
     logger.info("Loading input from %s", input_file)
@@ -122,7 +142,7 @@ def main(
     logger.info("Loaded %d rows", len(df))
 
     # Prepare features.
-    df = prepare_input(df, encoders)
+    df = prepare_input(df, encoders, metric_imputer=metric_imputer)
     feature_cols = cfg["feature_columns"]
 
     missing_cols = [c for c in feature_cols if c not in df.columns]
