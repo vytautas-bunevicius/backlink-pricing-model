@@ -16,6 +16,13 @@ authors = [
 ]
 license = { text = "Unlicense" }
 keywords = ["backlinks", "seo", "pricing", "machine-learning", "ahrefs", "majestic"]
+
+[project.scripts]
+backlink-extract = "scripts.data_pipeline.main:main"
+backlink-preprocess = "scripts.preprocess:main"
+backlink-train = "scripts.train:main"
+backlink-evaluate = "scripts.evaluate:main"
+backlink-predict = "scripts.predict:main"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

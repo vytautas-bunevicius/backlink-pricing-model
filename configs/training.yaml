@@ -1,21 +1,54 @@
 # Training configuration
-# Override these values per experiment
+# Override per experiment by copying this file:
+#   cp configs/training.yaml configs/experiment_v2.yaml
 
+# Data
+raw_data: data/raw/backlinks.parquet
+processed_data: data/processed/backlinks_cleaned.parquet
+train_data: data/engineered/train_df.parquet
+test_data: data/engineered/test_df.parquet
+
+# Splits
 test_size: 0.2
 random_state: 42
-cv_folds: 5
-early_stopping_rounds: 50
-n_optuna_trials: 100
 
-# Target variable
-target: final_price
+# Target (log-transformed price)
+target: log_price
 
 # Features
-features:
-  numerical:
-    - dr
-    - cf
-    - tf
-    - domain_traffic
-  categorical:
-    - country
+feature_columns:
+  - dr
+  - cf
+  - tf
+  - log_traffic
+  - tld_encoded
+  - country_encoded
+  - year
+  - month
+  - quarter
+
+# Categorical columns to label-encode
+categorical_columns:
+  - tld
+  - country
+
+# Optuna
+n_optuna_trials: 100
+optuna_storage: sqlite:///models/optuna_studies.db
+optuna_study_name: xgb_backlink_pricing
+
+# XGBoost search space
+xgb_search_space:
+  n_estimators: [100, 1000]
+  max_depth: [3, 12]
+  learning_rate: [0.01, 0.3]
+  subsample: [0.6, 1.0]
+  colsample_bytree: [0.6, 1.0]
+  reg_alpha: [1.0e-8, 10.0]
+  reg_lambda: [1.0e-8, 10.0]
+  min_child_weight: [1, 10]
+
+# Output
+model_dir: models
+model_filename: xgb_backlink_pricing.joblib
+metrics_filename: metrics_summary.csv

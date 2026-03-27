@@ -8,6 +8,7 @@ Predicts the fair market price for a backlink placement based on domain quality 
 - **CF** (Citation Flow) — Majestic link equity score (0-100)
 - **TF** (Trust Flow) — Majestic link trust score (0-100)
 - **Domain traffic** — Estimated organic search traffic
+- **TLD** — Top-level domain (.com, .co.uk, .io, etc.)
 - **Country** — Geographic market of the domain
 
 ## Project structure
@@ -21,13 +22,19 @@ backlink-pricing-model/
 │   ├── modeling/                 # Training, baselines, hyperparameter tuning
 │   ├── visualization/            # EDA, importance, and evaluation plots
 │   └── utils/                    # Shared helpers
-├── notebooks/                    # Numbered Jupyter notebooks (EDA -> Modeling)
-├── scripts/                      # CLI data pipelines (Supabase extraction)
+├── scripts/                      # CLI pipeline scripts
+│   ├── data_pipeline/            # Supabase data extraction
+│   ├── preprocess.py             # Data cleaning and feature engineering
+│   ├── train.py                  # Model training with Optuna HPO
+│   ├── evaluate.py               # Model evaluation and plots
+│   └── predict.py                # Inference on new domains
+├── notebooks/                    # Jupyter notebooks (exploration/docs)
 ├── configs/                      # YAML experiment configs
-├── models/                       # Trained model artifacts (gitignored)
-├── data/                         # Raw, processed, engineered data (gitignored)
+├── models/                       # Trained artifacts (gitignored)
+├── data/                         # Raw, processed, engineered (gitignored)
 ├── images/                       # Saved plot outputs
 ├── tests/                        # Mirrors src/ structure
+├── Makefile                      # Reproducible pipeline commands
 └── pyproject.toml                # uv + hatch + ruff + pytest config
 ```
 
@@ -38,44 +45,88 @@ backlink-pricing-model/
 git clone https://github.com/vytautas-bunevicius/backlink-pricing-model.git
 cd backlink-pricing-model
 
-# Install with uv
-uv sync
-uv sync --extra notebook    # for Jupyter
-uv sync --extra extraction  # for Supabase data pipeline
-uv sync --extra dev         # for development tools
+# Install everything
+make setup
 
-# Install pre-push hook
-cp .github/hooks/pre-push .git/hooks/pre-push
-chmod +x .git/hooks/pre-push
+# Or manually with uv
+uv sync --extra dev --extra notebook --extra extraction
 ```
 
-## Usage
+## Reproducible pipeline
 
-### Notebooks
+Run the full pipeline with a single command, or each step individually:
 
-Run notebooks in order for the full pipeline:
+```bash
+# Full pipeline: extract -> preprocess -> train -> evaluate
+make pipeline
+
+# Or step by step:
+make extract       # Pull data from Supabase -> data/raw/
+make preprocess    # Clean and engineer features -> data/processed/
+make train         # Train XGBoost with Optuna HPO -> models/
+make evaluate      # Evaluate on test set -> images/modeling/
+```
+
+### Retrain on existing data
+
+```bash
+make retrain       # preprocess -> train -> evaluate (skips extraction)
+```
+
+### Quick experiment
+
+```bash
+make train-quick   # Only 10 Optuna trials for fast iteration
+```
+
+### Custom config
+
+```bash
+# Copy and edit a config for a new experiment
+cp configs/training.yaml configs/experiment_v2.yaml
+# Edit experiment_v2.yaml...
+
+make train CONFIG_TRAIN=configs/experiment_v2.yaml
+```
+
+### Predict on new domains
+
+```bash
+make predict INPUT=data/raw/new_domains.csv
+```
+
+Input CSV needs columns: `domain`, `dr`, `cf`, `tf`, `domain_traffic`, `country`, `date_received`
+
+### All available commands
+
+```bash
+make help
+```
+
+## Notebooks
+
+Notebooks are for exploration and documentation, not the source of truth for training. Run them after `make preprocess` to explore the data:
 
 1. `01_data_loading_and_eda.ipynb` — Load data, explore distributions
 2. `02_feature_engineering_and_selection.ipynb` — Engineer and select features
 3. `03_modeling_and_evaluation.ipynb` — Train models, evaluate, analyze with SHAP
 
-### Data extraction
+## Experiment tracking
 
-```bash
-cp .env.example .env
-# Fill in your Supabase credentials
-python -m scripts.data_pipeline.main
-```
+Optuna studies are stored in `models/optuna_studies.db` (SQLite). This lets you:
+
+- Resume interrupted training runs
+- Compare trials across experiments
+- Inspect hyperparameter importance with `optuna.visualization`
+
+Training metadata (params, metrics, timestamp) is saved to `models/training_metadata.json` after each run.
 
 ## Development
 
 ```bash
-# Run tests
-pytest
-
-# Lint and format
-ruff check .
-ruff format .
+make check         # Run lint + tests
+make format        # Auto-format code
+make clean         # Remove generated artifacts
 ```
 
 ## License

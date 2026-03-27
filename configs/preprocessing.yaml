@@ -1,5 +1,10 @@
 # Preprocessing configuration
 
+# Input/output
+raw_data: data/raw/backlinks.parquet
+output_dir: data/processed
+output_filename: backlinks_cleaned
+
 # Price filtering
 min_price: 0.0
 max_price: 50000.0

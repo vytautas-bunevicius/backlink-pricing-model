@@ -92,6 +92,8 @@ models/*.joblib
 models/*.pkl
 models/*.onnx
 models/*.json
+models/*.csv
+models/*.db
 
 # Output and Results
 output/
