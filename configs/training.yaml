@@ -8,9 +8,11 @@ processed_data: data/processed/backlinks_cleaned.parquet
 train_data: data/engineered/train_df.parquet
 test_data: data/engineered/test_df.parquet
 
-# Splits
+# Splits (domain-grouped: all records for a domain go to one split)
 test_size: 0.2
+val_size: 0.1
 random_state: 42
+split_method: domain_grouped
 
 # Target (log-transformed price)
 target: log_price

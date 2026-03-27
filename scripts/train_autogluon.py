@@ -16,7 +16,6 @@ import logging
 from datetime import datetime, timezone
 
 import click
-import joblib
 import mlflow
 import pandas as pd
 from sklearn.metrics import (
@@ -30,7 +29,10 @@ from backlink_pricing_model.core.config import load_config, resolve_path
 from backlink_pricing_model.preprocessing.data_imputation import (
     impute_metrics_by_domain,
 )
-from backlink_pricing_model.preprocessing.data_loading import save_processed
+from backlink_pricing_model.preprocessing.data_loading import (
+    domain_grouped_split,
+    save_processed,
+)
 from backlink_pricing_model.preprocessing.feature_engineering import (
     add_price_ratio,
     add_temporal_features,
@@ -158,19 +160,36 @@ def main(
     df = add_price_ratio(df)
     df = add_temporal_features(df)
 
-    # Prepare AutoGluon data with raw categoricals.
-    df_model = prepare_autogluon_data(df, ag_cfg, target)
+    # Prepare AutoGluon data with raw categoricals (keep domain for split).
+    feature_cols = ag_cfg["feature_columns"]
+    keep_cols = [*feature_cols, target, "domain"]
+    available = [c for c in keep_cols if c in df.columns]
+    df_model = df[available].dropna(subset=[target])
     logger.info("Modeling dataset: %d rows", len(df_model))
 
-    # Train/test split.
-    test_size = cfg.get("test_size", 0.2)
+    # Domain-grouped 3-way split.
     random_state = cfg.get("random_state", 42)
-    test_df = df_model.sample(frac=test_size, random_state=random_state)
-    train_df = df_model.drop(test_df.index)
-    logger.info("Train: %d | Test: %d", len(train_df), len(test_df))
+    train_df, val_df, test_df = domain_grouped_split(
+        df_model,
+        test_size=cfg.get("test_size", 0.2),
+        val_size=cfg.get("val_size", 0.1),
+        random_state=random_state,
+        domain_col="domain",
+    )
+
+    # Drop domain column before modeling.
+    for split in (train_df, val_df, test_df):
+        if "domain" in split.columns:
+            split.drop(columns=["domain"], inplace=True)
+
+    logger.info(
+        "Train: %d | Val: %d | Test: %d",
+        len(train_df), len(val_df), len(test_df),
+    )
 
     # Save splits for reproducibility.
     save_processed(train_df, "train_df_autogluon", subdir="engineered")
+    save_processed(val_df, "val_df_autogluon", subdir="engineered")
     save_processed(test_df, "test_df_autogluon", subdir="engineered")
 
     # Train AutoGluon.
@@ -189,8 +208,10 @@ def main(
     )
     predictor.fit(
         train_data=train_df,
+        tuning_data=val_df,
         time_limit=time_limit,
         presets=preset,
+        use_bag_holdout=True,
     )
 
     # Leaderboard.

@@ -23,7 +23,6 @@ from sklearn.metrics import (
     root_mean_squared_error,
     r2_score,
 )
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBRegressor
 
@@ -31,7 +30,10 @@ from backlink_pricing_model.core.config import load_config, resolve_path
 from backlink_pricing_model.preprocessing.data_imputation import (
     impute_metrics_by_domain,
 )
-from backlink_pricing_model.preprocessing.data_loading import save_processed
+from backlink_pricing_model.preprocessing.data_loading import (
+    domain_grouped_split,
+    save_processed,
+)
 from backlink_pricing_model.preprocessing.feature_engineering import (
     add_price_ratio,
     add_temporal_features,
@@ -205,29 +207,43 @@ def main(config_path: str, trials: int | None) -> None:
     # Feature engineering.
     df, encoders = prepare_features(df, cfg)
 
-    # Build feature matrix.
+    # Build feature matrix (keep domain for grouped split).
     feature_cols = cfg["feature_columns"]
     target = cfg["target"]
-    df_model = df.dropna(subset=[*feature_cols, target])
+    keep_cols = [*feature_cols, target, "domain"]
+    available = [c for c in keep_cols if c in df.columns]
+    df_model = df[available].dropna(subset=[*feature_cols, target])
     logger.info(
         "Modeling dataset: %d rows, %d features",
         len(df_model),
         len(feature_cols),
     )
 
-    x = df_model[feature_cols]
-    y = df_model[target]
-
-    # Train/test split.
-    test_size = cfg.get("test_size", 0.2)
-    x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=test_size, random_state=random_state
+    # Domain-grouped 3-way split: train / val (for HPO) / test (held out).
+    train_split, val_split, test_split = domain_grouped_split(
+        df_model,
+        test_size=cfg.get("test_size", 0.2),
+        val_size=cfg.get("val_size", 0.1),
+        random_state=random_state,
+        domain_col="domain",
     )
-    logger.info("Train: %d | Test: %d", len(x_train), len(x_test))
+
+    x_train = train_split[feature_cols]
+    y_train = train_split[target]
+    x_val = val_split[feature_cols]
+    y_val = val_split[target]
+    x_test = test_split[feature_cols]
+    y_test = test_split[target]
+    logger.info(
+        "Train: %d | Val: %d | Test: %d", len(x_train), len(x_val), len(x_test)
+    )
 
     # Save splits for later evaluation.
     save_processed(
         pd.concat([x_train, y_train], axis=1), "train_df", subdir="engineered"
+    )
+    save_processed(
+        pd.concat([x_val, y_val], axis=1), "val_df", subdir="engineered"
     )
     save_processed(
         pd.concat([x_test, y_test], axis=1), "test_df", subdir="engineered"
@@ -252,8 +268,8 @@ def main(config_path: str, trials: int | None) -> None:
     objective = create_xgb_objective(
         x_train,
         y_train,
-        x_test,
-        y_test,
+        x_val,
+        y_val,
         cfg["xgb_search_space"],
         random_state,
     )
@@ -262,15 +278,15 @@ def main(config_path: str, trials: int | None) -> None:
     logger.info("Best RMSE: %.4f", study.best_value)
     logger.info("Best params: %s", study.best_params)
 
-    # Train final model with best params.
+    # Train final model with best params (val for early stopping).
     best_model = XGBRegressor(
         **study.best_params, random_state=random_state, n_jobs=-1
     )
     best_model.fit(
-        x_train, y_train, eval_set=[(x_test, y_test)], verbose=False
+        x_train, y_train, eval_set=[(x_val, y_val)], verbose=False
     )
 
-    # Evaluate.
+    # Evaluate on held-out test set (never seen during training or HPO).
     y_pred = best_model.predict(x_test)
     metrics = compute_metrics(y_test.values, y_pred)
     for name, value in metrics.items():
@@ -314,10 +330,11 @@ def main(config_path: str, trials: int | None) -> None:
     with mlflow.start_run(run_name=f"xgb_{n_trials}trials"):
         mlflow.log_params(study.best_params)
         mlflow.log_param("n_optuna_trials", n_trials)
-        mlflow.log_param("test_size", test_size)
+        mlflow.log_param("split_method", "domain_grouped")
         mlflow.log_param("random_state", random_state)
         mlflow.log_param("n_features", len(feature_cols))
         mlflow.log_param("train_rows", len(x_train))
+        mlflow.log_param("val_rows", len(x_val))
         mlflow.log_param("test_rows", len(x_test))
 
         mlflow.log_metrics(metrics)
