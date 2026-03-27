@@ -67,6 +67,7 @@ autogluon:
     - quarter
   refit_full: true           # retrain best model on 100% data for production
   save_dir: models/autogluon
+  openfe_top_k: 15           # number of auto-generated features to keep (0 to disable)
 
 
 mlflow_tracking_uri: mlruns

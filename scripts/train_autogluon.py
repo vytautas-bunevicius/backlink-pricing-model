@@ -33,6 +33,11 @@ from backlink_pricing_model.preprocessing.data_loading import (
     domain_grouped_split,
     save_processed,
 )
+from backlink_pricing_model.preprocessing.auto_features import (
+    apply_openfe,
+    fit_openfe,
+    save_feature_descriptions,
+)
 from backlink_pricing_model.preprocessing.feature_engineering import (
     add_price_ratio,
     add_temporal_features,
@@ -186,6 +191,59 @@ def main(
         "Train: %d | Val: %d | Test: %d",
         len(train_df), len(val_df), len(test_df),
     )
+
+    # OpenFE: discover interaction features on numeric columns.
+    numeric_cols = [
+        c for c in feature_cols
+        if c not in ("tld", "country") and c in train_df.columns
+    ]
+    cat_cols = [c for c in ("tld", "country") if c in train_df.columns]
+    openfe_top_k = ag_cfg.get("openfe_top_k", 15)
+
+    if numeric_cols and openfe_top_k > 0:
+        logger.info(
+            "Running OpenFE on %d numeric features (top_k=%d)...",
+            len(numeric_cols),
+            openfe_top_k,
+        )
+        discovered = fit_openfe(
+            train_df[numeric_cols],
+            train_df[target],
+            top_k=openfe_top_k,
+            n_jobs=1,
+            task="regression",
+        )
+        save_feature_descriptions(
+            discovered,
+            resolve_path(f"{cfg.get('model_dir', 'models')}/openfe_features.json"),
+        )
+
+        # Apply to all splits.
+        train_numeric, val_numeric, test_numeric = apply_openfe(
+            train_df[numeric_cols],
+            test_df[numeric_cols],
+            discovered,
+            n_jobs=1,
+            val_x=val_df[numeric_cols],
+        )
+
+        # Reassemble with categoricals and target.
+        for col in cat_cols:
+            train_numeric[col] = train_df[col].values
+            val_numeric[col] = val_df[col].values
+            test_numeric[col] = test_df[col].values
+
+        train_numeric[target] = train_df[target].values
+        val_numeric[target] = val_df[target].values
+        test_numeric[target] = test_df[target].values
+
+        train_df = train_numeric
+        val_df = val_numeric
+        test_df = test_numeric
+
+        logger.info(
+            "Features after OpenFE: %d", len(train_df.columns) - 1
+        )
 
     # Save splits for reproducibility.
     save_processed(train_df, "train_df_autogluon", subdir="engineered")
