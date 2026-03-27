@@ -92,8 +92,12 @@ def save_plot(
     """
     from pathlib import Path
 
-    from backlink_pricing_model.core.environment import get_project_root
+    output_path = Path(output_dir)
+    if not output_path.is_absolute():
+        from backlink_pricing_model.core.environment import get_project_root
 
-    path = get_project_root() / output_dir / f"{filename}.png"
+        output_path = get_project_root() / output_dir
+
+    path = output_path / f"{filename}.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     pio.write_image(fig, str(path), width=width, height=height, scale=2)

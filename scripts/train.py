@@ -13,6 +13,7 @@ from pathlib import Path
 
 import click
 import joblib
+import mlflow
 import numpy as np
 import optuna
 import pandas as pd
@@ -153,6 +154,24 @@ def create_xgb_objective(
     return objective
 
 
+def setup_mlflow(cfg: dict) -> None:
+    """Configure MLflow tracking from config.
+
+    Args:
+        cfg: Training configuration dict.
+    """
+    tracking_uri = cfg.get("mlflow_tracking_uri", "mlruns")
+    tracking_path = resolve_path(tracking_uri)
+    tracking_path.mkdir(parents=True, exist_ok=True)
+    mlflow.set_tracking_uri(f"file://{tracking_path}")
+
+    experiment_name = cfg.get("mlflow_experiment_name", "backlink-pricing")
+    mlflow.set_experiment(experiment_name)
+    logger.info(
+        "MLflow tracking: %s (experiment: %s)", tracking_path, experiment_name
+    )
+
+
 @click.command()
 @click.option(
     "--config",
@@ -174,6 +193,9 @@ def main(config_path: str, trials: int | None) -> None:
     random_state = cfg.get("random_state", 42)
     n_trials = trials or cfg.get("n_optuna_trials", 100)
 
+    # Setup MLflow.
+    setup_mlflow(cfg)
+
     # Load cleaned data.
     processed_path = resolve_path(cfg["processed_data"])
     logger.info("Loading processed data from %s", processed_path)
@@ -188,7 +210,9 @@ def main(config_path: str, trials: int | None) -> None:
     target = cfg["target"]
     df_model = df.dropna(subset=[*feature_cols, target])
     logger.info(
-        "Modeling dataset: %d rows, %d features", len(df_model), len(feature_cols)
+        "Modeling dataset: %d rows, %d features",
+        len(df_model),
+        len(feature_cols),
     )
 
     x = df_model[feature_cols]
@@ -212,9 +236,7 @@ def main(config_path: str, trials: int | None) -> None:
     # Optuna study with persistent SQLite storage.
     storage = cfg.get("optuna_storage")
     if storage:
-        storage_path = resolve_path(
-            storage.replace("sqlite:///", "")
-        )
+        storage_path = resolve_path(storage.replace("sqlite:///", ""))
         storage_path.parent.mkdir(parents=True, exist_ok=True)
         storage = f"sqlite:///{storage_path}"
 
@@ -258,11 +280,12 @@ def main(config_path: str, trials: int | None) -> None:
     model_dir = resolve_path(cfg.get("model_dir", "models"))
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    model_path = model_dir / cfg.get("model_filename", "xgb_backlink_pricing.joblib")
+    model_path = model_dir / cfg.get(
+        "model_filename", "xgb_backlink_pricing.joblib"
+    )
     joblib.dump(best_model, model_path)
     logger.info("Saved model to %s", model_path)
 
-    # Save encoders alongside model.
     encoders_path = model_dir / "label_encoders.joblib"
     joblib.dump(encoders, encoders_path)
     logger.info("Saved encoders to %s", encoders_path)
@@ -281,11 +304,32 @@ def main(config_path: str, trials: int | None) -> None:
     metadata_path = model_dir / "training_metadata.json"
     with metadata_path.open("w") as f:
         json.dump(metadata, f, indent=2, default=str)
-    logger.info("Saved metadata to %s", metadata_path)
 
-    # CSV metrics summary.
-    metrics_path = model_dir / cfg.get("metrics_filename", "metrics_summary.csv")
+    metrics_path = model_dir / cfg.get(
+        "metrics_filename", "metrics_summary.csv"
+    )
     pd.DataFrame([metrics]).to_csv(metrics_path, index=False)
+
+    # Log everything to MLflow.
+    with mlflow.start_run(run_name=f"xgb_{n_trials}trials"):
+        mlflow.log_params(study.best_params)
+        mlflow.log_param("n_optuna_trials", n_trials)
+        mlflow.log_param("test_size", test_size)
+        mlflow.log_param("random_state", random_state)
+        mlflow.log_param("n_features", len(feature_cols))
+        mlflow.log_param("train_rows", len(x_train))
+        mlflow.log_param("test_rows", len(x_test))
+
+        mlflow.log_metrics(metrics)
+
+        mlflow.log_artifact(str(model_path))
+        mlflow.log_artifact(str(encoders_path))
+        mlflow.log_artifact(str(metadata_path))
+        mlflow.log_artifact(config_path)
+
+        mlflow.xgboost.log_model(best_model, artifact_path="model")
+
+        logger.info("Logged run to MLflow: %s", mlflow.active_run().info.run_id)
 
     logger.info("Training complete")
 

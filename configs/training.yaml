@@ -48,6 +48,10 @@ xgb_search_space:
   reg_lambda: [1.0e-8, 10.0]
   min_child_weight: [1, 10]
 
+# MLflow
+mlflow_tracking_uri: mlruns
+mlflow_experiment_name: backlink-pricing
+
 # Output
 model_dir: models
 model_filename: xgb_backlink_pricing.joblib

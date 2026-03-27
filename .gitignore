@@ -95,6 +95,9 @@ models/*.json
 models/*.csv
 models/*.db
 
+# MLflow
+mlruns/
+
 # Output and Results
 output/
 results/
