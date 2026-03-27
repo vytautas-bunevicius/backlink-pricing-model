@@ -20,7 +20,7 @@ import pandas as pd
 from sklearn.metrics import (
     mean_absolute_error,
     mean_absolute_percentage_error,
-    mean_squared_error,
+    root_mean_squared_error,
     r2_score,
 )
 from sklearn.model_selection import train_test_split
@@ -58,7 +58,7 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     """
     return {
         "mae": float(mean_absolute_error(y_true, y_pred)),
-        "rmse": float(mean_squared_error(y_true, y_pred, squared=False)),
+        "rmse": float(root_mean_squared_error(y_true, y_pred)),
         "r2": float(r2_score(y_true, y_pred)),
         "mape": float(mean_absolute_percentage_error(y_true, y_pred)),
     }
@@ -149,7 +149,7 @@ def create_xgb_objective(
             verbose=False,
         )
         pred = model.predict(x_val)
-        return float(mean_squared_error(y_val, pred, squared=False))
+        return float(root_mean_squared_error(y_val, pred))
 
     return objective
 

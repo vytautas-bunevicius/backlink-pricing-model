@@ -16,13 +16,6 @@ authors = [
 ]
 license = { text = "Unlicense" }
 keywords = ["backlinks", "seo", "pricing", "machine-learning", "ahrefs", "majestic"]
-
-[project.scripts]
-backlink-extract = "scripts.data_pipeline.main:main"
-backlink-preprocess = "scripts.preprocess:main"
-backlink-train = "scripts.train:main"
-backlink-evaluate = "scripts.evaluate:main"
-backlink-predict = "scripts.predict:main"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -53,8 +46,6 @@ dependencies = [
     "ipython>=9.11.0",
     "jinja2>=3.1",
     "pyyaml>=6",
-    "scipy-stubs~=1.16.3",
-    "pandas-stubs~=2.3.3",
 ]
 
 [project.optional-dependencies]
@@ -80,6 +71,13 @@ dev = [
     "pandas-stubs>=2.2.3",
     "ty==0.0.24",
 ]
+
+[project.scripts]
+backlink-extract = "scripts.data_pipeline.main:main"
+backlink-preprocess = "scripts.preprocess:main"
+backlink-train = "scripts.train:main"
+backlink-evaluate = "scripts.evaluate:main"
+backlink-predict = "scripts.predict:main"
 
 [dependency-groups]
 dev = [
