@@ -62,6 +62,7 @@ notebook = [
 ]
 extraction = [
     "supabase>=2",
+    "pydantic-settings>=2.7",
     "python-dotenv>=1.2",
 ]
 dev = [
