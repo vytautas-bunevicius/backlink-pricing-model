@@ -1,0 +1,21 @@
+# Training configuration
+# Override these values per experiment
+
+test_size: 0.2
+random_state: 42
+cv_folds: 5
+early_stopping_rounds: 50
+n_optuna_trials: 100
+
+# Target variable
+target: final_price
+
+# Features
+features:
+  numerical:
+    - dr
+    - cf
+    - tf
+    - domain_traffic
+  categorical:
+    - country

@@ -1,0 +1,1 @@
+"""Supabase data extraction pipeline."""

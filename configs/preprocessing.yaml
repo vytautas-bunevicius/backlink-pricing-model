@@ -1,0 +1,14 @@
+# Preprocessing configuration
+
+# Price filtering
+min_price: 0.0
+max_price: 50000.0
+
+# Quality metric tier boundaries
+quality_tiers:
+  boundaries: [0, 20, 40, 60, 80, 100]
+  labels: [very_low, low, medium, high, premium]
+
+# Outlier detection
+outlier_method: iqr
+iqr_multiplier: 1.5
