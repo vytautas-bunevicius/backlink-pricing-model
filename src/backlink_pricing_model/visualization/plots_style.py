@@ -1,21 +1,66 @@
-"""Shared plot styling configuration for consistent visuals."""
+"""Shared Plotly styling and export helpers."""
 
-import plotly.graph_objects as go
+import logging
+import warnings
+from pathlib import Path
+
 import plotly.io as pio
+from plotly.graph_objects import Layout
 
 
-# Color palette.
-COLORS = {
-    "primary": "#3A5CED",
-    "secondary": "#7E7AE6",
-    "accent": "#82E5E8",
-    "highlight": "#85A2FF",
-    "muted": "#C2A9FF",
-    "positive": "#34D399",
-    "negative": "#F87171",
-    "neutral": "#94A3B8",
+_LOGGER = logging.getLogger(__name__)
+
+# Ensure Kaleido/export warnings are emitted at most once per session.
+warnings.filterwarnings("once", category=RuntimeWarning, module=__name__)
+
+# Primary brand colors
+PRIMARY_BLUE = "#3A5CED"
+LIGHT_BLUE = "#7BC0FF"
+
+# Technical colors
+WHITE = "#FFFFFF"
+GRAY_LIGHT = "#E5E8EF"
+TEXT_DARK = "#1A1E21"
+BACKGROUND_TRANSPARENT = "rgba(255, 255, 255, 0.9)"
+
+# Typography specifications
+FONT_FAMILY = "Gordita, Figtree, sans-serif"
+FONT_SIZE_TITLE = 24
+FONT_SIZE_AXIS = 16
+FONT_SIZE_TICK = 14
+FONT_SIZE_LEGEND = 14
+
+# Default plot dimensions
+PLOT_HEIGHT = 600
+PLOT_WIDTH_PER_SUBPLOT = 400
+PLOT_MARGINS = {"l": 60, "r": 150, "t": 100, "b": 80, "pad": 10}
+
+# Base plot layout configuration
+BASE_LAYOUT = {
+    "paper_bgcolor": WHITE,
+    "plot_bgcolor": WHITE,
+    "font": {
+        "family": FONT_FAMILY,
+        "color": TEXT_DARK,
+        "size": FONT_SIZE_AXIS,
+    },
+    "xaxis": {
+        "gridcolor": GRAY_LIGHT,
+        "linecolor": GRAY_LIGHT,
+        "zerolinecolor": GRAY_LIGHT,
+        "showline": True,
+        "linewidth": 1,
+    },
+    "yaxis": {
+        "gridcolor": GRAY_LIGHT,
+        "linecolor": GRAY_LIGHT,
+        "zerolinecolor": GRAY_LIGHT,
+        "showline": True,
+        "linewidth": 1,
+    },
 }
 
+# Backward-compatible color palettes
 SEQUENTIAL_PALETTE: list[str] = [
     "#3A5CED",
     "#5B6FF0",
@@ -38,66 +83,37 @@ CATEGORICAL_PALETTE: list[str] = [
     "#6366F1",
 ]
 
-
-def get_default_layout(**overrides: object) -> dict:
-    """Return default Plotly layout configuration.
-
-    Args:
-        **overrides: Layout properties to override.
-
-    Returns:
-        Layout dict for plotly figures.
-    """
-    layout = {
-        "template": "plotly_white",
-        "font": {"family": "Inter, system-ui, sans-serif", "size": 13},
-        "title_font_size": 18,
-        "margin": {"l": 60, "r": 30, "t": 60, "b": 60},
-        "colorway": CATEGORICAL_PALETTE,
-        "hoverlabel": {"font_size": 12},
-    }
-    layout.update(overrides)
-    return layout
+# Backward-compatible named color mapping
+COLORS = {
+    "primary": PRIMARY_BLUE,
+    "secondary": "#7E7AE6",
+    "accent": "#82E5E8",
+    "highlight": "#85A2FF",
+    "muted": "#C2A9FF",
+    "positive": "#34D399",
+    "negative": "#F87171",
+    "neutral": "#94A3B8",
+}
 
 
-def apply_default_style(fig: go.Figure, **overrides: object) -> go.Figure:
-    """Apply default styling to a Plotly figure.
-
-    Args:
-        fig: Plotly figure to style.
-        **overrides: Layout properties to override.
-
-    Returns:
-        Styled figure.
-    """
-    fig.update_layout(**get_default_layout(**overrides))
-    return fig
+def apply_plotly_defaults(template_name: str = "backlink_pricing") -> None:
+    """Register and activate the default Plotly template for this project."""
+    template = {"layout": Layout(**BASE_LAYOUT)}
+    pio.templates[template_name] = template
+    pio.templates.default = template_name
 
 
-def save_plot(
-    fig: go.Figure,
-    filename: str,
-    output_dir: str = "images",
-    width: int = 1200,
-    height: int = 600,
-) -> None:
-    """Save a Plotly figure as a static PNG image.
+def save_figure_image(fig, save_path: str | Path) -> bool:
+    """Persist a Plotly figure when static image export is available."""
+    output_path = Path(save_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    Args:
-        fig: Figure to save.
-        filename: Output filename (without extension).
-        output_dir: Target directory.
-        width: Image width in pixels.
-        height: Image height in pixels.
-    """
-    from pathlib import Path
+    try:
+        fig.write_image(output_path)
+    except (ValueError, RuntimeError) as exc:
+        message = f"Skipping static export: {exc}"
+        _LOGGER.warning(message)
+        warnings.warn(message, RuntimeWarning, stacklevel=2)
+        return False
 
-    output_path = Path(output_dir)
-    if not output_path.is_absolute():
-        from backlink_pricing_model.core.environment import get_project_root
-
-        output_path = get_project_root() / output_dir
-
-    path = output_path / f"{filename}.png"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    pio.write_image(fig, str(path), width=width, height=height, scale=2)
+    return True
