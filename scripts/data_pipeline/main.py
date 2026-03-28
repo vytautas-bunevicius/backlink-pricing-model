@@ -34,7 +34,7 @@ def create_supabase_client(config: SupabaseConfig) -> Client:
     Returns:
         Authenticated Supabase client.
     """
-    return create_client(config.supabase_url, config.supabase_service_role_key)
+    return create_client(config.database_url, config.supabase_service_role_key)
 
 
 def extract_backlinks(
@@ -104,7 +104,7 @@ def main() -> None:
     except Exception:
         logger.exception(
             "Failed to load Supabase config. "
-            "Ensure .env file exists with SUPABASE_URL and "
+            "Ensure .env file exists with DATABASE_URL and "
             "SUPABASE_SERVICE_ROLE_KEY."
         )
         sys.exit(1)

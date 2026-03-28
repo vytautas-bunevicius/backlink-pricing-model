@@ -1,13 +1,16 @@
 """Pydantic models for the data extraction pipeline."""
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings
 
 
 class SupabaseConfig(BaseSettings):
     """Supabase connection settings loaded from environment."""
 
-    supabase_url: str = Field(description="Supabase project URL")
+    database_url: str = Field(
+        description="Supabase project URL",
+        validation_alias=AliasChoices("DATABASE_URL", "SUPABASE_URL"),
+    )
     supabase_service_role_key: str = Field(
         description="Supabase service role key"
     )

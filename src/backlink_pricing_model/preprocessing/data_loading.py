@@ -53,16 +53,27 @@ def load_raw_parquet(
         DataFrame with typed columns.
 
     Raises:
-        FileNotFoundError: If the data file does not exist.
+        FileNotFoundError: If neither Parquet nor same-named CSV exists.
     """
     path = get_project_root() / "data" / "raw" / filename
-    if not path.exists():
-        msg = (
-            f"Data file not found: {path}. "
-            "Run `python -m scripts.data_pipeline.main` first."
+    if path.exists():
+        return pd.read_parquet(path, engine="pyarrow")
+
+    # Graceful fallback: if parquet is missing but CSV exists, load CSV.
+    csv_fallback = path.with_suffix(".csv")
+    if csv_fallback.exists():
+        return pd.read_csv(
+            csv_fallback,
+            dtype=COLUMN_DTYPES,
+            parse_dates=["date_received"],
         )
-        raise FileNotFoundError(msg)
-    return pd.read_parquet(path, engine="pyarrow")
+
+    msg = (
+        f"Data file not found: {path} (or {csv_fallback}). "
+        "Run `python -m scripts.data_pipeline.main` first, "
+        "or place raw backlinks data in data/raw/."
+    )
+    raise FileNotFoundError(msg)
 
 
 def load_raw_csv(

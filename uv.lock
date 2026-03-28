@@ -387,6 +387,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "ipykernel" },
     { name = "ipython" },
     { name = "jinja2" },
     { name = "joblib" },
@@ -447,6 +448,7 @@ dev = [
 requires-dist = [
     { name = "autogluon-tabular", extras = ["all"], marker = "extra == 'autogluon'", specifier = ">=1.2" },
     { name = "click", specifier = ">=8" },
+    { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=7.2" },
     { name = "ipython", specifier = ">=9.11.0" },
     { name = "ipython", marker = "extra == 'notebook'", specifier = ">=9.11" },
