@@ -184,30 +184,29 @@ def plot_tld_distribution(
     top_n: int = 10,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot TLD market share as a donut chart."""
+    """Plot TLD market share as horizontal bar chart with percentages."""
     tld_counts = df["tld"].value_counts()
+    total = tld_counts.sum()
     top = tld_counts.head(top_n)
-    other = tld_counts.iloc[top_n:].sum()
-    if other > 0:
-        top = pd.concat([top, pd.Series({"Other": other})])
+    pct = (top / total * 100).round(1)
 
     fig = go.Figure(
-        go.Pie(
-            labels=top.index,
-            values=top.values,
-            hole=0.45,
-            marker_colors=CATEGORICAL_PALETTE[: len(top)],
-            textinfo="label+percent",
+        go.Bar(
+            x=pct.values,
+            y=pct.index,
+            orientation="h",
+            marker_color=PRIMARY_BLUE,
+            text=[f"{v}%" for v in pct.values],
             textposition="outside",
             textfont_size=11,
-            pull=[0.03 if i == 0 else 0 for i in range(len(top))],
         )
     )
     fig.update_layout(
         title_text=_title(config, "TLD market share"),
-        showlegend=False,
-        height=500,
-        width=600,
+        xaxis_title="Share (%)",
+        yaxis_title=None,
+        yaxis={"categoryorder": "total ascending"},
+        height=max(350, top_n * 32 + 100),
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -251,30 +250,29 @@ def plot_country_distribution(
     top_n: int = 10,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot traffic country market share as a donut chart."""
+    """Plot traffic country market share as horizontal bar chart with percentages."""
     country_counts = df["country"].dropna().value_counts()
+    total = country_counts.sum()
     top = country_counts.head(top_n)
-    other = country_counts.iloc[top_n:].sum()
-    if other > 0:
-        top = pd.concat([top, pd.Series({"Other": other})])
+    pct = (top / total * 100).round(1)
 
     fig = go.Figure(
-        go.Pie(
-            labels=top.index,
-            values=top.values,
-            hole=0.45,
-            marker_colors=CATEGORICAL_PALETTE[: len(top)],
-            textinfo="label+percent",
+        go.Bar(
+            x=pct.values,
+            y=pct.index,
+            orientation="h",
+            marker_color=LIGHT_BLUE,
+            text=[f"{v}%" for v in pct.values],
             textposition="outside",
             textfont_size=11,
-            pull=[0.03 if i == 0 else 0 for i in range(len(top))],
         )
     )
     fig.update_layout(
         title_text=_title(config, "Traffic country market share"),
-        showlegend=False,
-        height=500,
-        width=600,
+        xaxis_title="Share (%)",
+        yaxis_title=None,
+        yaxis={"categoryorder": "total ascending"},
+        height=max(350, top_n * 32 + 100),
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
