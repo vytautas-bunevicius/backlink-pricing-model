@@ -1,9 +1,6 @@
 """Distribution plots for price, quality metrics, and traffic."""
 
-import logging
-
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -11,22 +8,19 @@ from backlink_pricing_model.core.models.visualization import PlotConfig
 from backlink_pricing_model.visualization.plots_style import (
     BASE_LAYOUT,
     CATEGORICAL_PALETTE,
-    FONT_SIZE_TICK,
     GRAY_LIGHT,
+    GRAY_MID,
     LIGHT_BLUE,
     PLOT_HEIGHT,
-    PLOT_MARGINS,
     PLOT_WIDTH_PER_SUBPLOT,
     PRIMARY_BLUE,
     save_figure_image,
 )
 
-_logger = logging.getLogger(__name__)
-
 
 def _apply_base_layout(fig: go.Figure, config: PlotConfig | None) -> go.Figure:
-    """Apply base layout and optional PlotConfig overrides to a figure."""
-    layout_kwargs: dict = {**BASE_LAYOUT, "margin": PLOT_MARGINS}
+    """Apply base layout and optional PlotConfig overrides."""
+    layout_kwargs: dict = {**BASE_LAYOUT}
 
     if config is not None:
         if config.height is not None:
@@ -34,7 +28,7 @@ def _apply_base_layout(fig: go.Figure, config: PlotConfig | None) -> go.Figure:
         if config.width is not None:
             layout_kwargs["width"] = config.width
         if config.title is not None:
-            layout_kwargs["title"] = config.title
+            layout_kwargs["title_text"] = config.title
         if config.custom_layout is not None:
             layout_kwargs.update(config.custom_layout)
 
@@ -45,9 +39,12 @@ def _apply_base_layout(fig: go.Figure, config: PlotConfig | None) -> go.Figure:
 
 
 def _maybe_save(fig: go.Figure, config: PlotConfig | None) -> None:
-    """Save figure if config has a save_path set."""
     if config is not None and config.save_path is not None:
         save_figure_image(fig, config.save_path)
+
+
+def _title(config: PlotConfig | None, default: str) -> str:
+    return config.title if config and config.title else default
 
 
 def plot_price_distribution(
@@ -55,30 +52,27 @@ def plot_price_distribution(
     log_scale: bool = True,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot the distribution of backlink prices.
+    """Plot the distribution of backlink prices."""
+    if log_scale and "log_price" in df.columns:
+        col, x_label = "log_price", "Log price"
+        default_title = "Backlink price distribution (log scale)"
+    else:
+        col, x_label = "final_price", "Price (USD)"
+        default_title = "Backlink price distribution"
 
-    Args:
-        df: DataFrame with 'final_price' column.
-        log_scale: Whether to use log scale on x-axis.
-        config: Optional plot configuration.
-
-    Returns:
-        Plotly figure.
-    """
-    col = "log_price" if log_scale and "log_price" in df.columns else "final_price"
-    default_title = (
-        "Backlink price distribution (log scale)"
-        if log_scale
-        else "Backlink price distribution"
+    fig = go.Figure(
+        go.Histogram(
+            x=df[col].dropna(),
+            nbinsx=80,
+            marker_color=PRIMARY_BLUE,
+            marker_line_width=0,
+        )
     )
-
-    fig = px.histogram(
-        df,
-        x=col,
-        nbins=80,
-        title=config.title if config and config.title else default_title,
-        labels={col: "Price (USD)" if not log_scale else "Log price"},
-        color_discrete_sequence=[PRIMARY_BLUE],
+    fig.update_layout(
+        title_text=_title(config, default_title),
+        xaxis_title=x_label,
+        yaxis_title=None,
+        bargap=0.02,
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -89,15 +83,7 @@ def plot_metric_distributions(
     df: pd.DataFrame,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot distributions of DR, CF, and TF as subplots.
-
-    Args:
-        df: DataFrame with dr, cf, tf columns.
-        config: Optional plot configuration.
-
-    Returns:
-        Plotly figure with three subplots.
-    """
+    """Plot distributions of DR, CF, and TF as subplots."""
     metrics = [m for m in ["dr", "cf", "tf"] if m in df.columns]
     num_cols = len(metrics)
 
@@ -105,16 +91,16 @@ def plot_metric_distributions(
         rows=1,
         cols=num_cols,
         subplot_titles=[m.upper() for m in metrics],
+        horizontal_spacing=0.08,
     )
 
     for i, metric in enumerate(metrics, 1):
-        data = df[metric].dropna()
         fig.add_trace(
             go.Histogram(
-                x=data,
+                x=df[metric].dropna(),
                 nbinsx=50,
                 marker_color=CATEGORICAL_PALETTE[i - 1],
-                name=metric.upper(),
+                marker_line_width=0,
                 showlegend=False,
             ),
             row=1,
@@ -124,32 +110,30 @@ def plot_metric_distributions(
         axis_suffix = "" if i == 1 else str(i)
         fig.update_layout(**{
             f"xaxis{axis_suffix}": {
+                "title_text": "Score",
                 "gridcolor": GRAY_LIGHT,
-                "linecolor": GRAY_LIGHT,
-                "zerolinecolor": GRAY_LIGHT,
                 "showline": True,
                 "linewidth": 1,
-                "tickfont": {"size": FONT_SIZE_TICK},
+                "linecolor": GRAY_LIGHT,
             },
             f"yaxis{axis_suffix}": {
+                "title_text": None,
                 "gridcolor": GRAY_LIGHT,
-                "linecolor": GRAY_LIGHT,
-                "zerolinecolor": GRAY_LIGHT,
                 "showline": True,
                 "linewidth": 1,
-                "tickfont": {"size": FONT_SIZE_TICK},
+                "linecolor": GRAY_LIGHT,
             },
         })
 
-    default_title = "Quality metric distributions"
     fig.update_layout(
-        title=config.title if config and config.title else default_title,
+        title_text=_title(config, "Quality metric distributions"),
         height=config.height if config and config.height else PLOT_HEIGHT,
         width=(
             config.width
             if config and config.width
             else PLOT_WIDTH_PER_SUBPLOT * num_cols
         ),
+        bargap=0.02,
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -161,39 +145,34 @@ def plot_price_by_quality_tier(
     metric: str = "dr",
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot price distribution across quality tiers.
-
-    Args:
-        df: DataFrame with final_price and the metric column.
-        metric: Quality metric to use for tiers (dr, cf, tf).
-        config: Optional plot configuration.
-
-    Returns:
-        Plotly box plot figure.
-    """
+    """Plot price distribution across quality tiers."""
     data = df.dropna(subset=[metric, "final_price"]).copy()
     bins = [0, 20, 40, 60, 80, 100]
     labels = ["0-19", "20-39", "40-59", "60-79", "80-100"]
-    data["tier"] = pd.cut(data[metric], bins=bins, labels=labels, right=False)
-
-    data["tier"] = pd.Categorical(data["tier"], categories=labels, ordered=True)
+    data["tier"] = pd.Categorical(
+        pd.cut(data[metric], bins=bins, labels=labels, right=False),
+        categories=labels,
+        ordered=True,
+    )
     data = data.sort_values("tier")
 
-    default_title = f"Price by {metric.upper()} tier"
-    fig = px.box(
-        data,
-        x="tier",
-        y="final_price",
-        title=config.title if config and config.title else default_title,
-        labels={"tier": f"{metric.upper()} tier", "final_price": "Price (USD)"},
-        color="tier",
-        color_discrete_sequence=CATEGORICAL_PALETTE,
-        category_orders={"tier": labels},
-    )
+    fig = go.Figure()
+    for i, tier in enumerate(labels):
+        tier_data = data[data["tier"] == tier]["final_price"]
+        fig.add_trace(
+            go.Box(
+                y=tier_data,
+                name=tier,
+                marker_color=CATEGORICAL_PALETTE[i],
+                line_color=CATEGORICAL_PALETTE[i],
+                showlegend=False,
+            )
+        )
+
     fig.update_layout(
-        showlegend=False,
-        yaxis={"automargin": True},
-        margin={"l": 80, "r": 30, "t": 60, "b": 60},
+        title_text=_title(config, f"Price by {metric.upper()} tier"),
+        xaxis_title=f"{metric.upper()} tier",
+        yaxis_title="Price (USD)",
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -205,31 +184,21 @@ def plot_tld_distribution(
     top_n: int = 15,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot top TLD distribution by count.
+    """Plot top TLD distribution by count."""
+    tld_counts = df["tld"].value_counts().head(top_n)
 
-    Args:
-        df: DataFrame with 'tld' column.
-        top_n: Number of top TLDs to show.
-        config: Optional plot configuration.
-
-    Returns:
-        Plotly bar chart figure.
-    """
-    tld_counts = df["tld"].value_counts().head(top_n).reset_index()
-    tld_counts.columns = ["tld", "count"]
-
-    default_title = f"Top {top_n} TLD distribution"
-    fig = px.bar(
-        tld_counts,
-        x="tld",
-        y="count",
-        title=config.title if config and config.title else default_title,
-        labels={"tld": "TLD", "count": "Count"},
-        color_discrete_sequence=[PRIMARY_BLUE],
+    fig = go.Figure(
+        go.Bar(
+            x=tld_counts.index,
+            y=tld_counts.values,
+            marker_color=PRIMARY_BLUE,
+        )
     )
     fig.update_layout(
-        xaxis={"tickangle": -45},
-        margin={"b": 100},
+        title_text=_title(config, f"Top {top_n} TLDs by listing count"),
+        xaxis_title=None,
+        yaxis_title="Listings",
+        xaxis_tickangle=-45,
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -241,39 +210,27 @@ def plot_price_by_tld(
     top_n: int = 10,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot median price by TLD.
-
-    Args:
-        df: DataFrame with 'tld' and 'final_price' columns.
-        top_n: Number of top TLDs to include.
-        config: Optional plot configuration.
-
-    Returns:
-        Plotly bar chart figure.
-    """
+    """Plot median price by TLD."""
     top_tlds = df["tld"].value_counts().head(top_n).index
-    data = df[df["tld"].isin(top_tlds)]
-
     medians = (
-        data.groupby("tld")["final_price"]
+        df[df["tld"].isin(top_tlds)]
+        .groupby("tld")["final_price"]
         .median()
         .sort_values(ascending=False)
-        .reset_index()
     )
-    medians.columns = ["tld", "median_price"]
 
-    default_title = f"Median price by TLD (top {top_n})"
-    fig = px.bar(
-        medians,
-        x="tld",
-        y="median_price",
-        title=config.title if config and config.title else default_title,
-        labels={"tld": "TLD", "median_price": "Median price (USD)"},
-        color_discrete_sequence=[LIGHT_BLUE],
+    fig = go.Figure(
+        go.Bar(
+            x=medians.index,
+            y=medians.values,
+            marker_color=LIGHT_BLUE,
+        )
     )
     fig.update_layout(
-        xaxis={"tickangle": -45},
-        margin={"b": 100},
+        title_text=_title(config, f"Median price by TLD (top {top_n})"),
+        xaxis_title=None,
+        yaxis_title="Median price (USD)",
+        xaxis_tickangle=-45,
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -285,29 +242,20 @@ def plot_country_distribution(
     top_n: int = 15,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot top country distribution by count.
+    """Plot top country distribution by count."""
+    country_counts = df["country"].dropna().value_counts().head(top_n)
 
-    Args:
-        df: DataFrame with 'country' column.
-        top_n: Number of top countries to show.
-        config: Optional plot configuration.
-
-    Returns:
-        Plotly bar chart figure.
-    """
-    country_counts = (
-        df["country"].dropna().value_counts().head(top_n).reset_index()
+    fig = go.Figure(
+        go.Bar(
+            x=country_counts.index,
+            y=country_counts.values,
+            marker_color=LIGHT_BLUE,
+        )
     )
-    country_counts.columns = ["country", "count"]
-
-    default_title = f"Top {top_n} countries by listing count"
-    fig = px.bar(
-        country_counts,
-        x="country",
-        y="count",
-        title=config.title if config and config.title else default_title,
-        labels={"country": "Country", "count": "Count"},
-        color_discrete_sequence=[LIGHT_BLUE],
+    fig.update_layout(
+        title_text=_title(config, f"Top {top_n} countries by listing count"),
+        xaxis_title=None,
+        yaxis_title="Listings",
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -318,30 +266,26 @@ def plot_missing_values(
     df: pd.DataFrame,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot missing value percentages per column.
-
-    Args:
-        df: Input DataFrame.
-        config: Optional plot configuration.
-
-    Returns:
-        Plotly horizontal bar chart figure.
-    """
+    """Plot missing value percentages per column."""
     missing_pct = (df.isnull().sum() / len(df) * 100).sort_values()
     missing_pct = missing_pct[missing_pct > 0]
 
-    default_title = "Missing values by column"
-    fig = px.bar(
-        x=missing_pct.values,
-        y=missing_pct.index,
-        orientation="h",
-        title=config.title if config and config.title else default_title,
-        labels={"x": "Missing (%)", "y": ""},
-        color_discrete_sequence=[GRAY_LIGHT],
+    fig = go.Figure(
+        go.Bar(
+            x=missing_pct.values,
+            y=missing_pct.index,
+            orientation="h",
+            marker_color=GRAY_MID,
+            text=[f"{v:.1f}%" for v in missing_pct.values],
+            textposition="outside",
+            textfont_size=10,
+        )
     )
     fig.update_layout(
-        yaxis={"automargin": True},
-        margin={"l": 140, "r": 30, "t": 60, "b": 60},
+        title_text=_title(config, "Missing values by column"),
+        xaxis_title="Missing (%)",
+        yaxis_title=None,
+        height=max(350, len(missing_pct) * 35 + 100),
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)

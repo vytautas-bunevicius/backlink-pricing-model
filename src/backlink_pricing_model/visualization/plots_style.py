@@ -10,57 +10,55 @@ from plotly.graph_objects import Layout
 
 _LOGGER = logging.getLogger(__name__)
 
-# Ensure Kaleido/export warnings are emitted at most once per session.
 warnings.filterwarnings("once", category=RuntimeWarning, module=__name__)
 
-# Primary brand colors
 PRIMARY_BLUE = "#3A5CED"
 LIGHT_BLUE = "#7BC0FF"
 
-# Technical colors
 WHITE = "#FFFFFF"
 GRAY_LIGHT = "#E5E8EF"
+GRAY_MID = "#94A3B8"
 TEXT_DARK = "#1A1E21"
 BACKGROUND_TRANSPARENT = "rgba(255, 255, 255, 0.9)"
 
-# Typography specifications
-FONT_FAMILY = "Gordita, Figtree, sans-serif"
-FONT_SIZE_TITLE = 24
-FONT_SIZE_AXIS = 16
-FONT_SIZE_TICK = 14
-FONT_SIZE_LEGEND = 14
+FONT_FAMILY = "Inter, system-ui, -apple-system, sans-serif"
+FONT_SIZE_TITLE = 18
+FONT_SIZE_AXIS = 13
+FONT_SIZE_TICK = 12
+FONT_SIZE_LEGEND = 12
 
-# Default plot dimensions
-PLOT_HEIGHT = 600
-PLOT_WIDTH_PER_SUBPLOT = 400
-PLOT_MARGINS = {"l": 60, "r": 150, "t": 100, "b": 80, "pad": 10}
+PLOT_HEIGHT = 500
+PLOT_WIDTH_PER_SUBPLOT = 420
+PLOT_MARGINS = {"l": 70, "r": 30, "t": 60, "b": 60, "pad": 4}
 
-# Base plot layout configuration
+_AXIS_DEFAULTS = {
+    "gridcolor": GRAY_LIGHT,
+    "linecolor": GRAY_LIGHT,
+    "zerolinecolor": GRAY_LIGHT,
+    "showline": True,
+    "linewidth": 1,
+    "automargin": True,
+    "title_standoff": 16,
+    "title_font_size": FONT_SIZE_AXIS,
+    "tickfont_size": FONT_SIZE_TICK,
+}
+
 BASE_LAYOUT = {
     "paper_bgcolor": WHITE,
     "plot_bgcolor": WHITE,
     "font": {
         "family": FONT_FAMILY,
         "color": TEXT_DARK,
-        "size": FONT_SIZE_AXIS,
+        "size": FONT_SIZE_TICK,
     },
-    "xaxis": {
-        "gridcolor": GRAY_LIGHT,
-        "linecolor": GRAY_LIGHT,
-        "zerolinecolor": GRAY_LIGHT,
-        "showline": True,
-        "linewidth": 1,
-    },
-    "yaxis": {
-        "gridcolor": GRAY_LIGHT,
-        "linecolor": GRAY_LIGHT,
-        "zerolinecolor": GRAY_LIGHT,
-        "showline": True,
-        "linewidth": 1,
-    },
+    "title_font_size": FONT_SIZE_TITLE,
+    "title_x": 0.5,
+    "title_xanchor": "center",
+    "xaxis": {**_AXIS_DEFAULTS},
+    "yaxis": {**_AXIS_DEFAULTS},
+    "margin": PLOT_MARGINS,
 }
 
-# Color palettes
 CATEGORICAL_PALETTE: list[str] = [
     PRIMARY_BLUE,
     LIGHT_BLUE,
@@ -71,7 +69,7 @@ CATEGORICAL_PALETTE: list[str] = [
     "#34D399",
     "#F59E0B",
     "#F87171",
-    "#94A3B8",
+    GRAY_MID,
 ]
 
 
