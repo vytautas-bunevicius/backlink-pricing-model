@@ -11,9 +11,9 @@ from backlink_pricing_model.core.models.visualization import PlotConfig
 from backlink_pricing_model.visualization.plots_style import (
     BASE_LAYOUT,
     CATEGORICAL_PALETTE,
-    COLORS,
     FONT_SIZE_TICK,
     GRAY_LIGHT,
+    LIGHT_BLUE,
     PLOT_HEIGHT,
     PLOT_MARGINS,
     PLOT_WIDTH_PER_SUBPLOT,
@@ -85,7 +85,7 @@ def plot_predictions_vs_actuals(
             x=[min_val, max_val],
             y=[min_val, max_val],
             mode="lines",
-            line={"color": COLORS["negative"], "dash": "dash"},
+            line={"color": "#F87171", "dash": "dash"},
             name="Perfect prediction",
         )
     )
@@ -144,7 +144,7 @@ def plot_residuals(
             x=y_pred,
             y=residuals,
             mode="markers",
-            marker={"color": COLORS["secondary"], "opacity": 0.3, "size": 4},
+            marker={"color": LIGHT_BLUE, "opacity": 0.3, "size": 4},
             name="Residuals",
             showlegend=False,
         ),
@@ -153,7 +153,7 @@ def plot_residuals(
     )
 
     fig.add_hline(
-        y=0, line_dash="dash", line_color=COLORS["negative"], row=1, col=2
+        y=0, line_dash="dash", line_color="#F87171", row=1, col=2
     )
 
     # Apply consistent axis styling to each subplot.

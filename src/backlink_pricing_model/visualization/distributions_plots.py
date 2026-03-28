@@ -11,9 +11,9 @@ from backlink_pricing_model.core.models.visualization import PlotConfig
 from backlink_pricing_model.visualization.plots_style import (
     BASE_LAYOUT,
     CATEGORICAL_PALETTE,
-    COLORS,
     FONT_SIZE_TICK,
     GRAY_LIGHT,
+    LIGHT_BLUE,
     PLOT_HEIGHT,
     PLOT_MARGINS,
     PLOT_WIDTH_PER_SUBPLOT,
@@ -256,7 +256,7 @@ def plot_price_by_tld(
         y="median_price",
         title=config.title if config and config.title else default_title,
         labels={"tld": "TLD", "median_price": "Median price (USD)"},
-        color_discrete_sequence=[COLORS["secondary"]],
+        color_discrete_sequence=[LIGHT_BLUE],
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -290,7 +290,7 @@ def plot_country_distribution(
         y="count",
         title=config.title if config and config.title else default_title,
         labels={"country": "Country", "count": "Count"},
-        color_discrete_sequence=[COLORS["accent"]],
+        color_discrete_sequence=[LIGHT_BLUE],
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -320,7 +320,7 @@ def plot_missing_values(
         orientation="h",
         title=config.title if config and config.title else default_title,
         labels={"x": "Missing (%)", "y": "Column"},
-        color_discrete_sequence=[COLORS["negative"]],
+        color_discrete_sequence=["#F87171"],
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)

@@ -60,40 +60,19 @@ BASE_LAYOUT = {
     },
 }
 
-# Backward-compatible color palettes
-SEQUENTIAL_PALETTE: list[str] = [
-    "#3A5CED",
-    "#5B6FF0",
-    "#7E7AE6",
-    "#85A2FF",
-    "#82E5E8",
-    "#C2A9FF",
-]
-
+# Color palettes
 CATEGORICAL_PALETTE: list[str] = [
-    "#3A5CED",
+    PRIMARY_BLUE,
+    LIGHT_BLUE,
     "#7E7AE6",
-    "#82E5E8",
     "#85A2FF",
+    "#82E5E8",
     "#C2A9FF",
     "#34D399",
     "#F59E0B",
     "#F87171",
     "#94A3B8",
-    "#6366F1",
 ]
-
-# Backward-compatible named color mapping
-COLORS = {
-    "primary": PRIMARY_BLUE,
-    "secondary": "#7E7AE6",
-    "accent": "#82E5E8",
-    "highlight": "#85A2FF",
-    "muted": "#C2A9FF",
-    "positive": "#34D399",
-    "negative": "#F87171",
-    "neutral": "#94A3B8",
-}
 
 
 def apply_plotly_defaults(template_name: str = "backlink_pricing") -> None:

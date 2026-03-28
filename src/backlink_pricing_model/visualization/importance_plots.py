@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 from backlink_pricing_model.core.models.visualization import PlotConfig
 from backlink_pricing_model.visualization.plots_style import (
     BASE_LAYOUT,
-    COLORS,
     PLOT_HEIGHT,
     PLOT_MARGINS,
     PRIMARY_BLUE,
