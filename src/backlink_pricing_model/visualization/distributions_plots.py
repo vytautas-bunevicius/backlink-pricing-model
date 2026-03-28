@@ -181,24 +181,33 @@ def plot_price_by_quality_tier(
 
 def plot_tld_distribution(
     df: pd.DataFrame,
-    top_n: int = 15,
+    top_n: int = 10,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot top TLD distribution by count."""
-    tld_counts = df["tld"].value_counts().head(top_n)
+    """Plot TLD market share as a donut chart."""
+    tld_counts = df["tld"].value_counts()
+    top = tld_counts.head(top_n)
+    other = tld_counts.iloc[top_n:].sum()
+    if other > 0:
+        top = pd.concat([top, pd.Series({"Other": other})])
 
     fig = go.Figure(
-        go.Bar(
-            x=tld_counts.index,
-            y=tld_counts.values,
-            marker_color=PRIMARY_BLUE,
+        go.Pie(
+            labels=top.index,
+            values=top.values,
+            hole=0.45,
+            marker_colors=CATEGORICAL_PALETTE[: len(top)],
+            textinfo="label+percent",
+            textposition="outside",
+            textfont_size=11,
+            pull=[0.03 if i == 0 else 0 for i in range(len(top))],
         )
     )
     fig.update_layout(
-        title_text=_title(config, f"Top {top_n} TLDs by listing count"),
-        xaxis_title=None,
-        yaxis_title="Listings",
-        xaxis_tickangle=-45,
+        title_text=_title(config, "TLD market share"),
+        showlegend=False,
+        height=500,
+        width=600,
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -239,23 +248,33 @@ def plot_price_by_tld(
 
 def plot_country_distribution(
     df: pd.DataFrame,
-    top_n: int = 15,
+    top_n: int = 10,
     config: PlotConfig | None = None,
 ) -> go.Figure:
-    """Plot top country distribution by count."""
-    country_counts = df["country"].dropna().value_counts().head(top_n)
+    """Plot traffic country market share as a donut chart."""
+    country_counts = df["country"].dropna().value_counts()
+    top = country_counts.head(top_n)
+    other = country_counts.iloc[top_n:].sum()
+    if other > 0:
+        top = pd.concat([top, pd.Series({"Other": other})])
 
     fig = go.Figure(
-        go.Bar(
-            x=country_counts.index,
-            y=country_counts.values,
-            marker_color=LIGHT_BLUE,
+        go.Pie(
+            labels=top.index,
+            values=top.values,
+            hole=0.45,
+            marker_colors=CATEGORICAL_PALETTE[: len(top)],
+            textinfo="label+percent",
+            textposition="outside",
+            textfont_size=11,
+            pull=[0.03 if i == 0 else 0 for i in range(len(top))],
         )
     )
     fig.update_layout(
-        title_text=_title(config, f"Top {top_n} countries by listing count"),
-        xaxis_title=None,
-        yaxis_title="Listings",
+        title_text=_title(config, "Traffic country market share"),
+        showlegend=False,
+        height=500,
+        width=600,
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
