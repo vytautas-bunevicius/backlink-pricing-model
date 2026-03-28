@@ -218,6 +218,10 @@ def plot_tld_distribution(
         labels={"tld": "TLD", "count": "Count"},
         color_discrete_sequence=[PRIMARY_BLUE],
     )
+    fig.update_layout(
+        xaxis={"tickangle": -45},
+        margin={"b": 100},
+    )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
     return fig
@@ -257,6 +261,10 @@ def plot_price_by_tld(
         title=config.title if config and config.title else default_title,
         labels={"tld": "TLD", "median_price": "Median price (USD)"},
         color_discrete_sequence=[LIGHT_BLUE],
+    )
+    fig.update_layout(
+        xaxis={"tickangle": -45},
+        margin={"b": 100},
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -319,8 +327,12 @@ def plot_missing_values(
         y=missing_pct.index,
         orientation="h",
         title=config.title if config and config.title else default_title,
-        labels={"x": "Missing (%)", "y": "Column"},
-        color_discrete_sequence=["#F87171"],
+        labels={"x": "Missing (%)", "y": ""},
+        color_discrete_sequence=[GRAY_LIGHT],
+    )
+    fig.update_layout(
+        yaxis={"automargin": True},
+        margin={"l": 140, "r": 30, "t": 60, "b": 60},
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
