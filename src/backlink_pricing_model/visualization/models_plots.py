@@ -39,6 +39,8 @@ def _apply_base_layout(fig: go.Figure, config: PlotConfig | None) -> go.Figure:
             layout_kwargs.update(config.custom_layout)
 
     fig.update_layout(**layout_kwargs)
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
     return fig
 
 

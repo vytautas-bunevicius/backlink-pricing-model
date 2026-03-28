@@ -39,6 +39,8 @@ def _apply_base_layout(fig: go.Figure, config: PlotConfig | None) -> go.Figure:
             layout_kwargs.update(config.custom_layout)
 
     fig.update_layout(**layout_kwargs)
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
     return fig
 
 
@@ -175,6 +177,10 @@ def plot_price_by_quality_tier(
     labels = ["0-19", "20-39", "40-59", "60-79", "80-100"]
     data["tier"] = pd.cut(data[metric], bins=bins, labels=labels, right=False)
 
+    # Sort by tier order so x-axis is ascending.
+    data["tier"] = pd.Categorical(data["tier"], categories=labels, ordered=True)
+    data = data.sort_values("tier")
+
     default_title = f"Price by {metric.upper()} tier"
     fig = px.box(
         data,
@@ -184,8 +190,13 @@ def plot_price_by_quality_tier(
         labels={"tier": f"{metric.upper()} tier", "final_price": "Price (USD)"},
         color="tier",
         color_discrete_sequence=CATEGORICAL_PALETTE,
+        category_orders={"tier": labels},
     )
-    fig.update_layout(showlegend=False)
+    fig.update_layout(
+        showlegend=False,
+        yaxis={"automargin": True},
+        margin={"l": 80, "r": 30, "t": 60, "b": 60},
+    )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
     return fig
