@@ -206,7 +206,8 @@ def plot_tld_distribution(
         xaxis_title="Share (%)",
         yaxis_title=None,
         yaxis={"categoryorder": "total ascending"},
-        height=max(350, top_n * 32 + 100),
+        height=max(400, top_n * 36 + 100),
+        width=800,
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
@@ -272,7 +273,8 @@ def plot_country_distribution(
         xaxis_title="Share (%)",
         yaxis_title=None,
         yaxis={"categoryorder": "total ascending"},
-        height=max(350, top_n * 32 + 100),
+        height=max(400, top_n * 36 + 100),
+        width=800,
     )
     _apply_base_layout(fig, config)
     _maybe_save(fig, config)
