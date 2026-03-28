@@ -121,7 +121,6 @@ def plot_metric_distributions(
             col=i,
         )
 
-        # Apply consistent axis styling to each subplot.
         axis_suffix = "" if i == 1 else str(i)
         fig.update_layout(**{
             f"xaxis{axis_suffix}": {
@@ -177,7 +176,6 @@ def plot_price_by_quality_tier(
     labels = ["0-19", "20-39", "40-59", "60-79", "80-100"]
     data["tier"] = pd.cut(data[metric], bins=bins, labels=labels, right=False)
 
-    # Sort by tier order so x-axis is ascending.
     data["tier"] = pd.Categorical(data["tier"], categories=labels, ordered=True)
     data = data.sort_values("tier")
 

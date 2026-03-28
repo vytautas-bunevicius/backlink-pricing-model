@@ -158,7 +158,6 @@ def plot_residuals(
         y=0, line_dash="dash", line_color="#F87171", row=1, col=2
     )
 
-    # Apply consistent axis styling to each subplot.
     for i in range(1, num_cols + 1):
         axis_suffix = "" if i == 1 else str(i)
         fig.update_layout(**{
