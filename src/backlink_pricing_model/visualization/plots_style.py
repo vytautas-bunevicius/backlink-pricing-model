@@ -14,6 +14,7 @@ warnings.filterwarnings("once", category=RuntimeWarning, module=__name__)
 
 PRIMARY_BLUE = "#3A5CED"
 LIGHT_BLUE = "#7BC0FF"
+SOFT_BLUE = "#abd9e9"
 
 WHITE = "#FFFFFF"
 GRAY_LIGHT = "#E5E8EF"
