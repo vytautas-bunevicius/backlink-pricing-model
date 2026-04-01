@@ -88,13 +88,8 @@ data/engineered/*.csv
 data/engineered/*.parquet
 
 # Model artifacts (reproduced via training)
-models/*.joblib
-models/*.pkl
-models/*.onnx
-models/*.json
-models/*.csv
-models/*.db
-models/autogluon/
+models/*
+!models/.gitkeep
 
 # MLflow
 mlruns/
