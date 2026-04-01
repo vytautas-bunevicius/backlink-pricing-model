@@ -60,42 +60,6 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="ray.*")
 logging.getLogger("ray").setLevel(logging.ERROR)
 
 
-def build_autogluon_hyperparameters(
-    model_families: list[str] | None,
-) -> dict | str:
-    """Build a constrained AutoGluon model search space.
-
-    Args:
-        model_families: Optional list of model family names (e.g. GBM, CAT, XGB).
-
-    Returns:
-        Hyperparameters argument compatible with TabularPredictor.fit().
-        Returns "default" when no explicit family filtering is requested.
-    """
-    if not model_families:
-        return "default"
-
-    allowed = {"GBM", "CAT", "XGB", "RF", "XT", "NN_TORCH", "FASTAI"}
-    cleaned: list[str] = []
-    for family in model_families:
-        family_upper = family.upper().strip()
-        if family_upper in allowed:
-            cleaned.append(family_upper)
-        else:
-            logger.warning(
-                "Ignoring unknown AutoGluon model family '%s'", family
-            )
-
-    if not cleaned:
-        logger.warning(
-            "No valid model families provided, falling back to default search"
-        )
-        return "default"
-
-    # Empty dict per family tells AutoGluon to use default params for that family
-    # while skipping all unlisted families.
-    return {family: {} for family in cleaned}
-
 
 def compute_metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
     """Compute regression metrics.
@@ -114,31 +78,6 @@ def compute_metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
         "mape": float(mean_absolute_percentage_error(y_true, y_pred)),
     }
 
-
-def prepare_autogluon_data(
-    df: pd.DataFrame, ag_cfg: dict, target: str
-) -> pd.DataFrame:
-    """Prepare data for AutoGluon with raw categoricals.
-
-    AutoGluon handles categorical encoding natively and often achieves
-    better results with raw string categories than label-encoded integers.
-
-    Args:
-        df: Cleaned DataFrame.
-        ag_cfg: AutoGluon config section.
-        target: Target column name.
-
-    Returns:
-        DataFrame with feature columns + target, NaN rows dropped.
-    """
-    feature_cols = ag_cfg["feature_columns"]
-    cols = [*feature_cols, target]
-    available = [c for c in cols if c in df.columns]
-    missing = set(cols) - set(available)
-    if missing:
-        logger.warning("Missing columns: %s", missing)
-
-    return df[available].dropna()
 
 
 def setup_mlflow(cfg: dict) -> None:
@@ -190,19 +129,12 @@ def main(
     logger.info("Loaded config: %s", config_path)
 
     target = cfg["target"]
-    preset = preset_override or ag_cfg.get("preset", "best_quality")
+    preset = preset_override or ag_cfg.get("preset", "high_quality")
     time_limit = time_limit_override or ag_cfg.get("time_limit", 3600)
     eval_metric = ag_cfg.get("eval_metric", "root_mean_squared_error")
     save_dir = str(resolve_path(ag_cfg.get("save_dir", "models/autogluon")))
     do_refit = ag_cfg.get("refit_full", True)
-    model_families = ag_cfg.get("model_families")
     use_bag_holdout = bool(ag_cfg.get("use_bag_holdout", False))
-    auto_stack = bool(ag_cfg.get("auto_stack", False))
-    num_bag_folds = int(ag_cfg.get("num_bag_folds", 0))
-    num_bag_sets = int(ag_cfg.get("num_bag_sets", 1))
-    num_stack_levels = int(ag_cfg.get("num_stack_levels", 0))
-    ag_verbosity = int(ag_cfg.get("verbosity", 2))
-    hyperparameters = build_autogluon_hyperparameters(model_families)
 
     # Setup MLflow.
     setup_mlflow(cfg)
@@ -320,7 +252,6 @@ def main(
         eval_metric=eval_metric,
         problem_type="regression",
         path=save_dir,
-        verbosity=ag_verbosity,
     )
     predictor.fit(
         train_data=train_df,
@@ -329,11 +260,6 @@ def main(
         presets=preset,
         refit_full=False,
         set_best_to_refit_full=False,
-        hyperparameters=hyperparameters,
-        auto_stack=auto_stack,
-        num_bag_folds=num_bag_folds,
-        num_bag_sets=num_bag_sets,
-        num_stack_levels=num_stack_levels,
         use_bag_holdout=use_bag_holdout,
         ag_args_ensemble={"fold_fitting_strategy": "sequential_local"},
     )
@@ -386,11 +312,6 @@ def main(
         "preset": preset,
         "time_limit": time_limit,
         "eval_metric": eval_metric,
-        "model_families": model_families,
-        "auto_stack": auto_stack,
-        "num_bag_folds": num_bag_folds,
-        "num_bag_sets": num_bag_sets,
-        "num_stack_levels": num_stack_levels,
         "use_bag_holdout": use_bag_holdout,
         "best_model": best_model,
         "metrics": metrics,
@@ -413,11 +334,6 @@ def main(
         mlflow.log_param("preset", preset)
         mlflow.log_param("time_limit", time_limit)
         mlflow.log_param("eval_metric", eval_metric)
-        mlflow.log_param("model_families", str(model_families))
-        mlflow.log_param("auto_stack", auto_stack)
-        mlflow.log_param("num_bag_folds", num_bag_folds)
-        mlflow.log_param("num_bag_sets", num_bag_sets)
-        mlflow.log_param("num_stack_levels", num_stack_levels)
         mlflow.log_param("use_bag_holdout", use_bag_holdout)
         mlflow.log_param("best_model", best_model)
         mlflow.log_param("n_features", len(ag_cfg["feature_columns"]))
