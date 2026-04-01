@@ -19,6 +19,7 @@ from backlink_pricing_model.preprocessing.data_imputation import (
 )
 from backlink_pricing_model.preprocessing.feature_engineering import (
     add_log_traffic,
+    add_missingness_flags,
     add_temporal_features,
     add_tld_feature,
     normalize_country,
@@ -27,7 +28,7 @@ from backlink_pricing_model.preprocessing.feature_engineering import (
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ def prepare_input(
     Returns:
         Feature-engineered DataFrame ready for prediction.
     """
+    df = add_missingness_flags(df)
     if metric_imputer:
         df = apply_domain_metric_imputer(df, metric_imputer)
     else:

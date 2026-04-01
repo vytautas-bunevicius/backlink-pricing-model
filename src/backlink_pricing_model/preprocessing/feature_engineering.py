@@ -337,3 +337,27 @@ def add_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     result["month"] = dt.dt.month
     result["quarter"] = dt.dt.quarter
     return result
+
+
+def add_missingness_flags(
+    df: pd.DataFrame,
+    columns: tuple[str, ...] = ("cf", "tf", "country"),
+) -> pd.DataFrame:
+    """Add binary missingness indicator columns for selected features.
+
+    These flags preserve missing-value information after imputation and can
+    improve downstream model quality when missingness itself is informative.
+
+    Args:
+        df: Input DataFrame.
+        columns: Columns for which to create `<col>_missing_flag`.
+
+    Returns:
+        DataFrame with added missingness flag columns.
+    """
+    result = df.copy()
+    for col in columns:
+        if col not in result.columns:
+            continue
+        result[f"{col}_missing_flag"] = result[col].isna().astype("int8")
+    return result

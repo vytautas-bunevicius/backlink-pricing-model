@@ -95,3 +95,9 @@ def save_figure_image(fig, save_path: str | Path) -> bool:
         return False
 
     return True
+
+
+def save_plot(fig, name: str, output_dir: str | Path) -> bool:
+    """Backward-compatible wrapper to save a figure by name and directory."""
+    path = Path(output_dir) / f"{name}.png"
+    return save_figure_image(fig, path)

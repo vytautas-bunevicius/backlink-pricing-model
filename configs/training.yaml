@@ -28,6 +28,9 @@ feature_columns:
   - year
   - month
   - quarter
+  - cf_missing_flag
+  - tf_missing_flag
+  - country_missing_flag
 
 # Categorical columns to label-encode
 categorical_columns:
@@ -52,9 +55,17 @@ xgb_search_space:
 
 
 autogluon:
-  preset: best_quality
+  preset: high_quality
   time_limit: 3600          # seconds (1 hour); increase for better results
   eval_metric: root_mean_squared_error
+  # Full search: all model families with bagging and stacking.
+  model_families: [GBM, CAT, XGB, RF, XT, NN_TORCH, FASTAI]
+  auto_stack: false
+  num_bag_folds: 5
+  num_stack_levels: 1
+  num_bag_sets: 1                # single bag set to reduce memory pressure
+  use_bag_holdout: true
+  verbosity: 2
   # AutoGluon handles categoricals natively — pass raw tld/country, not encoded
   feature_columns:
     - dr
@@ -66,9 +77,12 @@ autogluon:
     - year
     - month
     - quarter
+    - cf_missing_flag
+    - tf_missing_flag
+    - country_missing_flag
   refit_full: true           # retrain best model on 100% data for production
   save_dir: models/autogluon
-  openfe_top_k: 15           # number of auto-generated features to keep (0 to disable)
+  openfe_top_k: 0            # OpenFE is expensive; enable only for targeted experiments
 
 
 mlflow_tracking_uri: mlruns

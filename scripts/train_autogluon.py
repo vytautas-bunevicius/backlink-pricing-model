@@ -13,10 +13,12 @@ Usage:
 
 import json
 import logging
+import warnings
 from datetime import UTC, datetime
 
 import click
 import mlflow
+import numpy as np
 import pandas as pd
 from sklearn.metrics import (
     mean_absolute_error,
@@ -40,16 +42,59 @@ from backlink_pricing_model.preprocessing.data_loading import (
     save_processed,
 )
 from backlink_pricing_model.preprocessing.feature_engineering import (
+    add_missingness_flags,
     add_temporal_features,
 )
 
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+# Suppress noisy third-party warnings that clutter training output.
+warnings.filterwarnings("ignore", category=FutureWarning, module="mlflow.*")
+warnings.filterwarnings("ignore", category=FutureWarning, module="ray.*")
+logging.getLogger("ray").setLevel(logging.ERROR)
+
+
+def build_autogluon_hyperparameters(
+    model_families: list[str] | None,
+) -> dict | str:
+    """Build a constrained AutoGluon model search space.
+
+    Args:
+        model_families: Optional list of model family names (e.g. GBM, CAT, XGB).
+
+    Returns:
+        Hyperparameters argument compatible with TabularPredictor.fit().
+        Returns "default" when no explicit family filtering is requested.
+    """
+    if not model_families:
+        return "default"
+
+    allowed = {"GBM", "CAT", "XGB", "RF", "XT", "NN_TORCH", "FASTAI"}
+    cleaned: list[str] = []
+    for family in model_families:
+        family_upper = family.upper().strip()
+        if family_upper in allowed:
+            cleaned.append(family_upper)
+        else:
+            logger.warning(
+                "Ignoring unknown AutoGluon model family '%s'", family
+            )
+
+    if not cleaned:
+        logger.warning(
+            "No valid model families provided, falling back to default search"
+        )
+        return "default"
+
+    # Empty dict per family tells AutoGluon to use default params for that family
+    # while skipping all unlisted families.
+    return {family: {} for family in cleaned}
 
 
 def compute_metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
@@ -150,6 +195,14 @@ def main(
     eval_metric = ag_cfg.get("eval_metric", "root_mean_squared_error")
     save_dir = str(resolve_path(ag_cfg.get("save_dir", "models/autogluon")))
     do_refit = ag_cfg.get("refit_full", True)
+    model_families = ag_cfg.get("model_families")
+    use_bag_holdout = bool(ag_cfg.get("use_bag_holdout", False))
+    auto_stack = bool(ag_cfg.get("auto_stack", False))
+    num_bag_folds = int(ag_cfg.get("num_bag_folds", 0))
+    num_bag_sets = int(ag_cfg.get("num_bag_sets", 1))
+    num_stack_levels = int(ag_cfg.get("num_stack_levels", 0))
+    ag_verbosity = int(ag_cfg.get("verbosity", 2))
+    hyperparameters = build_autogluon_hyperparameters(model_families)
 
     # Setup MLflow.
     setup_mlflow(cfg)
@@ -162,6 +215,7 @@ def main(
 
     # Feature engineering (same as manual pipeline).
     df = add_temporal_features(df)
+    df = add_missingness_flags(df)
 
     # Prepare AutoGluon data with raw categoricals (keep domain for split).
     feature_cols = ag_cfg["feature_columns"]
@@ -266,14 +320,22 @@ def main(
         eval_metric=eval_metric,
         problem_type="regression",
         path=save_dir,
-        verbosity=2,
+        verbosity=ag_verbosity,
     )
     predictor.fit(
         train_data=train_df,
         tuning_data=val_df,
         time_limit=time_limit,
         presets=preset,
-        use_bag_holdout=True,
+        refit_full=False,
+        set_best_to_refit_full=False,
+        hyperparameters=hyperparameters,
+        auto_stack=auto_stack,
+        num_bag_folds=num_bag_folds,
+        num_bag_sets=num_bag_sets,
+        num_stack_levels=num_stack_levels,
+        use_bag_holdout=use_bag_holdout,
+        ag_args_ensemble={"fold_fitting_strategy": "sequential_local"},
     )
 
     # Leaderboard.
@@ -283,11 +345,20 @@ def main(
     # Best model evaluation.
     y_test = test_df[target]
     y_pred = predictor.predict(test_df)
-    metrics = compute_metrics(y_test, y_pred)
+    metrics = {"log_scale": compute_metrics(y_test, y_pred)}
+    if target == "log_price":
+        y_test_usd = np.expm1(y_test.values)
+        y_pred_usd = np.expm1(np.asarray(y_pred))
+        metrics["usd_scale"] = compute_metrics(
+            pd.Series(y_test_usd),
+            pd.Series(y_pred_usd),
+        )
     best_model = predictor.model_best
     logger.info("Best model: %s", best_model)
-    for name, value in metrics.items():
-        logger.info("  %s: %.4f", name.upper(), value)
+    for metric_group, values in metrics.items():
+        logger.info("  %s", metric_group)
+        for name, value in values.items():
+            logger.info("    %s: %.4f", name.upper(), value)
 
     # Refit on full data for production.
     if do_refit:
@@ -315,6 +386,12 @@ def main(
         "preset": preset,
         "time_limit": time_limit,
         "eval_metric": eval_metric,
+        "model_families": model_families,
+        "auto_stack": auto_stack,
+        "num_bag_folds": num_bag_folds,
+        "num_bag_sets": num_bag_sets,
+        "num_stack_levels": num_stack_levels,
+        "use_bag_holdout": use_bag_holdout,
         "best_model": best_model,
         "metrics": metrics,
         "train_rows": len(train_df),
@@ -336,12 +413,22 @@ def main(
         mlflow.log_param("preset", preset)
         mlflow.log_param("time_limit", time_limit)
         mlflow.log_param("eval_metric", eval_metric)
+        mlflow.log_param("model_families", str(model_families))
+        mlflow.log_param("auto_stack", auto_stack)
+        mlflow.log_param("num_bag_folds", num_bag_folds)
+        mlflow.log_param("num_bag_sets", num_bag_sets)
+        mlflow.log_param("num_stack_levels", num_stack_levels)
+        mlflow.log_param("use_bag_holdout", use_bag_holdout)
         mlflow.log_param("best_model", best_model)
         mlflow.log_param("n_features", len(ag_cfg["feature_columns"]))
         mlflow.log_param("train_rows", len(train_df))
         mlflow.log_param("test_rows", len(test_df))
 
-        mlflow.log_metrics(metrics)
+        mlflow.log_metrics({f"log_{k}": v for k, v in metrics["log_scale"].items()})
+        if "usd_scale" in metrics:
+            mlflow.log_metrics(
+                {f"usd_{k}": v for k, v in metrics["usd_scale"].items()}
+            )
 
         mlflow.log_artifact(str(metadata_path))
         mlflow.log_artifact(str(leaderboard_path))

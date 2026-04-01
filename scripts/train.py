@@ -8,6 +8,7 @@ Usage:
 
 import json
 import logging
+import warnings
 from datetime import UTC, datetime
 
 import click
@@ -34,16 +35,20 @@ from backlink_pricing_model.preprocessing.data_loading import (
     save_processed,
 )
 from backlink_pricing_model.preprocessing.feature_engineering import (
+    add_missingness_flags,
     add_temporal_features,
 )
 
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+warnings.filterwarnings("ignore", category=FutureWarning, module="mlflow.*")
+optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
 def safe_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -68,7 +73,8 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 
 def prepare_features(df: pd.DataFrame) -> pd.DataFrame:
     """Derive non-leaky features before split."""
-    return add_temporal_features(df)
+    df = add_temporal_features(df)
+    return add_missingness_flags(df)
 
 
 def fit_label_encoders(
@@ -117,6 +123,27 @@ def create_xgb_objective(
 ) -> callable:
     """Create an Optuna objective function for XGBoost."""
 
+    def _fit_with_early_stopping(model: XGBRegressor) -> None:
+        """Fit with backwards/forwards-compatible early stopping handling."""
+        try:
+            # XGBoost <=2.x supports early_stopping_rounds in fit().
+            model.fit(
+                x_train,
+                y_train,
+                eval_set=[(x_val, y_val)],
+                verbose=False,
+                early_stopping_rounds=early_stopping_rounds,
+            )
+        except TypeError:
+            # XGBoost >=3.x moved this to constructor/params.
+            model.set_params(early_stopping_rounds=early_stopping_rounds)
+            model.fit(
+                x_train,
+                y_train,
+                eval_set=[(x_val, y_val)],
+                verbose=False,
+            )
+
     def objective(trial: optuna.Trial) -> float:
         params = {
             "n_estimators": trial.suggest_int(
@@ -143,17 +170,13 @@ def create_xgb_objective(
             "min_child_weight": trial.suggest_int(
                 "min_child_weight", *search_space["min_child_weight"]
             ),
+            "eval_metric": "rmse",
+            "tree_method": "hist",
             "random_state": random_state,
             "n_jobs": -1,
         }
         model = XGBRegressor(**params)
-        model.fit(
-            x_train,
-            y_train,
-            eval_set=[(x_val, y_val)],
-            verbose=False,
-            early_stopping_rounds=early_stopping_rounds,
-        )
+        _fit_with_early_stopping(model)
         pred = model.predict(x_val)
         return float(root_mean_squared_error(y_val, pred))
 
