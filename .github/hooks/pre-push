@@ -8,33 +8,34 @@ cd "$REPO_ROOT" || exit 1
 
 echo "Running pre-push checks..."
 
-# Activate virtual environment if it exists
-if [ -d ".venv" ]; then
-    source .venv/bin/activate
+# Check if uv is installed
+if ! command -v uv &> /dev/null; then
+    echo "❌ uv is not installed. Please install it to run pre-push checks."
+    exit 1
 fi
 
-# Run Ruff format check and automatically commit changes if needed
-echo "Running Ruff format check..."
-if ! ruff format --check .; then
+# Run Ruff format check
+echo "🔍 Running Ruff format check..."
+if ! uv run ruff format --check .; then
     echo "Running automatic formatting..."
-    ruff format .
+    uv run ruff format .
 
     # Check if there are changes to commit
     if ! git diff --quiet; then
         git add .
         git commit -m "style: auto-format code with Ruff"
-        echo "Formatting changes have been automatically committed."
+        echo "✅ Formatting changes have been automatically committed."
     fi
 fi
-echo "Code formatting check complete."
+echo "✅ Code formatting check complete."
 
 # Run pytest
-echo "Running tests..."
-if ! PYTHONPATH=$PYTHONPATH:$(pwd) pytest tests/; then
-    echo "Tests failed. Push aborted."
+echo "🧪 Running tests..."
+if ! uv run pytest tests/; then
+    echo "❌ Tests failed. Push aborted."
     echo "Please fix the failing tests before pushing."
     exit 1
 fi
 
-echo "All checks passed. Proceeding with push."
+echo "✅ All checks passed. Proceeding with push."
 exit 0
