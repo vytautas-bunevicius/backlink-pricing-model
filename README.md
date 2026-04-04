@@ -145,11 +145,7 @@ Optional columns that improve accuracy when present:
 
 | Column | Type | Description |
 |---|---|---|
-| `initial_price` | float | Asking price before negotiation |
 | `domain` | string | Domain name (used to extract TLD) |
-| `niche` | string | Content category (tech, health, finance, etc.) |
-| `language` | string | Primary language of the site |
-| `link_type` | string | dofollow, nofollow, sponsored, UGC |
 
 ### Engineered features
 
@@ -158,7 +154,6 @@ Built on top of the raw columns by [feature_engineering.py](src/backlink_pricing
 - **Log transforms**: `log_price` and `log_traffic` to compress the long-tail distributions of price and traffic
 - **TLD extraction**: top-level domain parsed from the domain name; rare TLDs are collapsed into an `other` bucket
 - **Quality tiers**: DR, TF, and CF bucketed into five bands (very_low / low / medium / high / premium)
-- **Price ratio**: `final_price / initial_price` as a negotiation signal (requires `initial_price`)
 - **Temporal features**: year, month, and quarter extracted from `date_received` to capture seasonal pricing trends
 - **Missingness flags**: binary indicators for missing CF, TF, and country (absence itself is informative for newer or low-quality domains)
 
