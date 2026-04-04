@@ -1,143 +1,88 @@
-# backlink-pricing-model
+# Backlink Pricing Model
 
-Backlink pricing prediction model using Ahrefs and Majestic SEO metrics.
+Machine learning pipeline for predicting backlink placement valuations based on SEO metrics from Ahrefs and Majestic.
 
-Predicts the fair market price for a backlink placement based on domain quality signals:
+---
 
-- **DR** (Domain Rating) — Ahrefs authority score (0-100)
-- **CF** (Citation Flow) — Majestic link equity score (0-100)
-- **TF** (Trust Flow) — Majestic link trust score (0-100)
-- **Domain traffic** — Estimated organic search traffic
-- **TLD** — Top-level domain (.com, .co.uk, .io, etc.)
-- **Country** — Geographic market of the domain
+## Overview
 
-## Project structure
+This model standardizes pricing by analyzing domain quality signals:
+- **Authority**: DR (Ahrefs), CF & TF (Majestic).
+- **Traffic**: Estimated organic search traffic.
+- **Context**: TLD, Country, and Niche.
+- **Temporal**: Historical pricing and acquisition dates.
 
-```
-backlink-pricing-model/
-├── src/backlink_pricing_model/   # Importable Python package
-│   ├── core/                     # Logging, env config, Pydantic models
-│   ├── preprocessing/            # Data loading, cleaning, feature engineering
-│   ├── analysis/                 # Statistical tests, feature selection, SHAP
-│   ├── modeling/                 # Training, baselines, hyperparameter tuning
-│   ├── visualization/            # EDA, importance, and evaluation plots
-│   └── utils/                    # Shared helpers
-├── scripts/                      # CLI pipeline scripts
-│   ├── data_pipeline/            # Supabase data extraction
-│   ├── preprocess.py             # Data cleaning and feature engineering
-│   ├── train.py                  # Model training with Optuna HPO
-│   ├── evaluate.py               # Model evaluation and plots
-│   └── predict.py                # Inference on new domains
-├── notebooks/                    # Jupyter notebooks (exploration/docs)
-├── configs/                      # YAML experiment configs
-├── models/                       # Trained artifacts (gitignored)
-├── data/                         # Raw, processed, engineered (gitignored)
-├── images/                       # Saved plot outputs
-├── tests/                        # Mirrors src/ structure
-├── Makefile                      # Reproducible pipeline commands
-└── pyproject.toml                # uv + hatch + ruff + pytest config
-```
+---
 
-## Setup
+## Quick Start
 
+### 1. Requirements
+- Python 3.12 or 3.13
+- [uv](https://astral.sh/uv) package manager
+
+### 2. Setup
 ```bash
-# Clone
 git clone https://github.com/vytautas-bunevicius/backlink-pricing-model.git
 cd backlink-pricing-model
-
-# Python 3.12/3.13 is required (3.14 wheels are not available for all deps)
-uv venv --python 3.13 .venv
-
-# Install everything
-make setup
-
-# Or manually with uv
-uv sync --extra dev --extra notebook --extra extraction
+uv sync --all-extras --dev
+source .venv/bin/activate
 ```
 
-Optional interpretability extras (SHAP):
+---
 
-```bash
-uv sync --extra interpretability
-```
+## How It Works (Core Systems)
 
-## Reproducible pipeline
+The codebase is organized by intent within [src/backlink_pricing_model/](src/backlink_pricing_model/).
 
-Run the full pipeline with a single command, or each step individually:
+### 1. Data Preparation ([src/backlink_pricing_model/preprocessing/](src/backlink_pricing_model/preprocessing/))
+Handles the transition from raw SEO data to model-ready features:
+- **Cleaning**: Outlier removal and consistency checks in [data_cleaning.py](src/backlink_pricing_model/preprocessing/data_cleaning.py).
+- **Engineering**: Domain-specific feature generation (e.g., traffic-to-authority ratios) in [feature_engineering.py](src/backlink_pricing_model/preprocessing/feature_engineering.py).
 
-```bash
-# Full pipeline: extract -> preprocess -> train -> evaluate
-make pipeline
+### 2. Analysis & Selection ([src/backlink_pricing_model/analysis/](src/backlink_pricing_model/analysis/))
+- **Selection**: Automated feature selection using correlation analysis and importance ranking in [feature_selection.py](src/backlink_pricing_model/analysis/feature_selection.py).
+- **Explainability**: SHAP value calculation for model transparency in [shap_analysis.py](src/backlink_pricing_model/analysis/shap_analysis.py).
 
-# Or step by step:
-make extract       # Pull data from Supabase -> data/raw/
-make preprocess    # Clean and engineer features -> data/processed/
-make train         # Train XGBoost with Optuna HPO -> models/
-make evaluate      # Evaluate on test set -> images/modeling/
-```
+### 3. Modeling ([src/backlink_pricing_model/modeling/](src/backlink_pricing_model/modeling/))
+- **Training**: Managed training loops for XGBoost and LightGBM with Optuna hyperparameter optimization.
+- **AutoML**: High-accuracy ensemble modeling via [AutoGluon](https://auto.gluon.ai/).
 
-### Retrain on existing data
+---
 
-```bash
-make retrain       # preprocess -> train -> evaluate (skips extraction)
-```
+## Reproducible Pipeline
 
-### Quick experiment
+A [Makefile](Makefile) is provided to orchestrate the pipeline:
 
-```bash
-make train-quick   # Only 10 Optuna trials for fast iteration
-```
+| Command | Description |
+| :--- | :--- |
+| `make pipeline` | Full Pipeline: Extract → Preprocess → Train (AutoGluon) |
+| `make extract` | Pull raw data from Supabase to `data/raw/` |
+| `make preprocess` | Clean data and engineer features to `data/processed/` |
+| `make train` | Train XGBoost with Optuna HPO |
+| `make train-ag` | Train with AutoGluon (Best Quality mode) |
+| `make evaluate` | Generate evaluation plots and metrics |
 
-### Custom config
+---
 
-```bash
-# Copy and edit a config for a new experiment
-cp configs/training.yaml configs/experiment_v2.yaml
-# Edit experiment_v2.yaml...
+## Standards & Security
 
-make train CONFIG_TRAIN=configs/experiment_v2.yaml
-```
+### Naming Conventions
+- Use **snake_case** for all code and artifacts.
+- Follow the Google Python Style Guide for docstrings.
 
-### Predict on new domains
+### Security
+- **Supabase**: Access credentials must be stored in a `.env` file (never committed) or GCP Secret Manager for production.
 
-```bash
-make predict INPUT=data/raw/new_domains.csv
-```
+---
 
-Input CSV needs columns: `domain`, `dr`, `cf`, `tf`, `domain_traffic`, `country`, `date_received`
+## Deployment & Maintenance
 
-### All available commands
+### Deployment
+- **CI/CD**: Pushing to `main` triggers [GitHub Actions](.github/workflows/) for linting and testing.
+- **Inference**: Use `make predict INPUT=path/to/csv` for batch predictions.
 
-```bash
-make help
-```
+---
 
-## Notebooks
-
-Notebooks are for exploration and documentation, not the source of truth for training. Run them after `make preprocess` to explore the data:
-
-1. `01_data_loading_and_eda.ipynb` — Load data, explore distributions
-2. `02_feature_engineering_and_selection.ipynb` — Engineer and select features
-3. `03_modeling_and_evaluation.ipynb` — Train models, evaluate, analyze with SHAP
-
-## Experiment tracking
-
-Optuna studies are stored in `models/optuna_studies.db` (SQLite). This lets you:
-
-- Resume interrupted training runs
-- Compare trials across experiments
-- Inspect hyperparameter importance with `optuna.visualization`
-
-Training metadata (params, metrics, timestamp) is saved to `models/training_metadata.json` after each run.
-
-## Development
-
-```bash
-make check         # Run lint + tests
-make format        # Auto-format code
-make clean         # Remove generated artifacts
-```
-
-## License
-
-[Unlicense](LICENSE) — public domain.
+## Maintainers
+- **Growth Marketing Tools Team**
+- **Primary Contact**: Vytautas Bunevicius (vytautas.bunevicius@nordsec.com)
