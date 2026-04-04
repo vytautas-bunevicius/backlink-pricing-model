@@ -140,11 +140,6 @@ To replicate the model you need a Parquet or CSV file with at least these column
 | `domain_traffic` | float | Estimated monthly organic visits |
 | `country` | string | Domain registrant country code |
 | `date_received` | date | Date the placement offer was received |
-
-Optional columns that improve accuracy when present:
-
-| Column | Type | Description |
-|---|---|---|
 | `domain` | string | Domain name (used to extract TLD) |
 
 ### Engineered features

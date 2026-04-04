@@ -23,7 +23,6 @@ from backlink_pricing_model.preprocessing.feature_engineering import (
     add_tld_feature,
     normalize_country,
     normalize_link_source_type,
-    normalize_link_type,
 )
 
 
@@ -67,7 +66,6 @@ def main(config_path: str) -> None:
 
     # Normalize categoricals.
     df = normalize_country(df)
-    df = normalize_link_type(df)
     df = normalize_link_source_type(df)
 
     # Derive features.

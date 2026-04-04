@@ -133,15 +133,6 @@ _LINK_SOURCE_ALIASES: dict[str, str] = {
     "backlink pickup": "backlink_pickup",
 }
 
-# Link type normalization.
-_LINK_TYPE_ALIASES: dict[str, str] = {
-    "dofollow": "dofollow",
-    "nofollow": "nofollow",
-    "no follow": "nofollow",
-    "link insertion": "link_insertion",
-    "backlink": "dofollow",
-}
-
 
 def extract_tld(domain: str) -> str:
     """Extract the top-level domain from a domain string.
@@ -250,47 +241,6 @@ def normalize_link_source_type(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def normalize_link_type(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize link_type to consistent lowercase categories.
-
-    Args:
-        df: DataFrame with a 'link_type' column.
-
-    Returns:
-        DataFrame with normalized link_type.
-    """
-    result = df.copy()
-
-    def _normalize(value: object) -> str | None:
-        if not isinstance(value, str) or not value.strip():
-            return None
-        cleaned = value.strip().lower()
-        if cleaned in ("#n/a", "[]", ""):
-            return None
-        return _LINK_TYPE_ALIASES.get(cleaned, cleaned)
-
-    result["link_type"] = result["link_type"].apply(_normalize)
-    return result
-
-
-def add_price_ratio(df: pd.DataFrame) -> pd.DataFrame:
-    """Add negotiation ratio feature: final_price / initial_price.
-
-    Args:
-        df: DataFrame with final_price and initial_price columns.
-
-    Returns:
-        DataFrame with 'price_ratio' column added.
-    """
-    result = df.copy()
-    has_both = result["initial_price"].notna() & (result["initial_price"] > 0)
-    result["price_ratio"] = np.where(
-        has_both,
-        result["final_price"] / result["initial_price"],
-        np.nan,
-    )
-    return result
-
 
 def add_log_price(df: pd.DataFrame) -> pd.DataFrame:
     """Add log-transformed price for modeling.
@@ -341,7 +291,7 @@ def add_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_missingness_flags(
     df: pd.DataFrame,
-    columns: tuple[str, ...] = ("cf", "tf", "country"),
+    columns: tuple[str, ...] = ("cf", "tf", "country", "dr"),
 ) -> pd.DataFrame:
     """Add binary missingness indicator columns for selected features.
 
@@ -360,4 +310,171 @@ def add_missingness_flags(
         if col not in result.columns:
             continue
         result[f"{col}_missing_flag"] = result[col].isna().astype("int8")
+    return result
+
+
+def add_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add interaction and polynomial features for key metrics.
+
+    Creates DR*CF, DR*TF, CF/TF ratio, DR*log_traffic, DR^2,
+    and log_traffic^2 to capture non-linear relationships.
+
+    Args:
+        df: DataFrame with dr, cf, tf, log_traffic columns.
+
+    Returns:
+        DataFrame with interaction feature columns added.
+    """
+    result = df.copy()
+
+    # DR interactions (fill NaN with 0 for safe multiplication).
+    dr = result["dr"].fillna(0)
+    cf = result["cf"].fillna(0)
+    tf = result["tf"].fillna(0)
+    lt = result["log_traffic"].fillna(0)
+
+    result["dr_x_cf"] = dr * cf
+    result["dr_x_tf"] = dr * tf
+    result["dr_x_log_traffic"] = dr * lt
+    result["cf_x_log_traffic"] = cf * lt
+
+    # CF/TF ratio (trust flow relative to citation flow).
+    result["cf_tf_ratio"] = np.where(
+        tf > 0, cf / tf, 0.0
+    )
+
+    # Polynomial terms.
+    result["dr_squared"] = dr ** 2
+    result["log_traffic_squared"] = lt ** 2
+
+    # DR per unit of traffic (value density).
+    result["dr_per_log_traffic"] = np.where(
+        lt > 0, dr / lt, 0.0
+    )
+
+    logger.info("Added %d interaction features", 8)
+    return result
+
+
+def add_domain_frequency(df: pd.DataFrame) -> pd.DataFrame:
+    """Add domain record frequency as a feature.
+
+    Domains appearing many times may have different pricing dynamics
+    than one-off domains (repeat vs new relationships).
+
+    Args:
+        df: DataFrame with a 'domain' column.
+
+    Returns:
+        DataFrame with 'domain_freq' and 'log_domain_freq' columns.
+    """
+    result = df.copy()
+    freq = result["domain"].fillna("unknown").map(
+        result["domain"].fillna("unknown").value_counts()
+    )
+    result["domain_freq"] = freq
+    result["log_domain_freq"] = np.log1p(freq)
+    logger.info(
+        "Added domain frequency: mean=%.1f, max=%d",
+        freq.mean(),
+        freq.max(),
+    )
+    return result
+
+
+def normalize_link_source_for_modeling(
+    df: pd.DataFrame,
+    min_count: int = 20,
+) -> pd.DataFrame:
+    """Clean and group link_source_type for modeling.
+
+    Rare categories (below min_count) are collapsed into 'other'.
+
+    Args:
+        df: DataFrame with link_source_type column.
+        min_count: Minimum occurrence count to keep a category.
+
+    Returns:
+        DataFrame with cleaned link_source_type_clean column.
+    """
+    result = df.copy()
+    col = "link_source_type"
+    if col not in result.columns:
+        return result
+
+    values = result[col].fillna("unknown")
+    counts = values.value_counts()
+    rare = set(counts[counts < min_count].index)
+    result["link_source_type_clean"] = values.where(
+        ~values.isin(rare), "other"
+    )
+    n_kept = len(counts) - len(rare)
+    logger.info(
+        "link_source_type: kept %d categories, collapsed %d rare into 'other'",
+        n_kept,
+        len(rare),
+    )
+    return result
+
+
+def group_rare_tld(
+    df: pd.DataFrame,
+    min_count: int = 50,
+) -> pd.DataFrame:
+    """Group rare TLDs into 'other' to reduce cardinality.
+
+    Args:
+        df: DataFrame with tld column.
+        min_count: Minimum count to keep a TLD as-is.
+
+    Returns:
+        DataFrame with 'tld_grouped' column.
+    """
+    result = df.copy()
+    if "tld" not in result.columns:
+        return result
+
+    counts = result["tld"].value_counts()
+    rare = set(counts[counts < min_count].index)
+    result["tld_grouped"] = result["tld"].where(
+        ~result["tld"].isin(rare), "other"
+    )
+    logger.info(
+        "TLD grouping: %d -> %d categories (min_count=%d)",
+        len(counts),
+        result["tld_grouped"].nunique(),
+        min_count,
+    )
+    return result
+
+
+def group_rare_country(
+    df: pd.DataFrame,
+    min_count: int = 30,
+) -> pd.DataFrame:
+    """Group rare countries into 'other' to reduce cardinality.
+
+    Args:
+        df: DataFrame with country column.
+        min_count: Minimum count to keep a country as-is.
+
+    Returns:
+        DataFrame with 'country_grouped' column.
+    """
+    result = df.copy()
+    if "country" not in result.columns:
+        return result
+
+    values = result["country"].fillna("unknown")
+    counts = values.value_counts()
+    rare = set(counts[counts < min_count].index)
+    result["country_grouped"] = values.where(
+        ~values.isin(rare), "other"
+    )
+    logger.info(
+        "Country grouping: %d -> %d categories (min_count=%d)",
+        len(counts),
+        result["country_grouped"].nunique(),
+        min_count,
+    )
     return result
