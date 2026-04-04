@@ -85,9 +85,3 @@ To maintain a consistent development experience, we follow the Google Python Sty
 ## Deployment and Maintenance
 
 Our CI/CD workflow is integrated with GitHub Actions, which automatically runs linting and unit tests on every push to the `main` branch to ensure that the production pipeline remains stable. For production use, batch predictions can be generated using the CLI interface by running `make predict INPUT=path/to/csv`, which will output the valuations for any list of domains provided in the input file.
-
----
-
-## Maintainers
-- **Growth Marketing Tools Team**
-- **Primary Contact**: Vytautas Bunevicius (vytautas.bunevicius@nordsec.com)
