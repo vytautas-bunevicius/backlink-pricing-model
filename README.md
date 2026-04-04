@@ -5,9 +5,9 @@ Machine learning pipeline for predicting fair market valuations for backlink pla
 ## Table of contents
 
 - [How it works](#how-it-works)
-- [Project layout](#project-layout)
-- [Pipeline commands](#pipeline-commands)
 - [Setup](#setup)
+- [Pipeline commands](#pipeline-commands)
+- [Project layout](#project-layout)
 - [License](#license)
 
 ---
@@ -49,52 +49,6 @@ flowchart TD
 
 ---
 
-## Project layout
-
-```
-src/backlink_pricing_model/
-├── core/           # shared types and config
-├── preprocessing/  # data cleaning and feature engineering
-├── modeling/       # XGBoost, LightGBM, AutoGluon wrappers
-├── analysis/       # feature selection and SHAP
-├── visualization/  # plotting helpers
-└── utils/          # misc
-
-scripts/
-├── data_pipeline/  # Supabase extraction entrypoint
-├── preprocess.py   # cleaning and feature engineering
-├── train.py        # XGBoost and LightGBM with Optuna HPO
-├── train_autogluon.py
-├── evaluate.py
-└── predict.py
-
-notebooks/          # EDA, feature engineering, modeling walkthroughs
-configs/            # YAML config for preprocessing and training
-data/               # raw and processed dataset snapshots
-models/             # saved model artifacts
-```
-
----
-
-## Pipeline commands
-
-A [Makefile](Makefile) orchestrates the full end-to-end flow.
-
-| Command | What it does |
-|---|---|
-| `make pipeline` | Full run: extract, preprocess, train, evaluate |
-| `make extract` | Pull fresh data from Supabase |
-| `make preprocess` | Clean and engineer features |
-| `make train` | XGBoost with Optuna HPO (full budget) |
-| `make train-quick` | XGBoost with 10 Optuna trials |
-| `make train-autogluon` | AutoGluon ensemble (1h default) |
-| `make train-autogluon-quick` | AutoGluon with 10 min time limit |
-| `make evaluate` | Validation metrics and SHAP plots |
-| `make predict INPUT=path/to/csv` | Batch inference on new domains |
-| `make test` | Run unit tests |
-
----
-
 ## Setup
 
 Requires Python 3.12 or 3.13 and [uv](https://astral.sh/uv).
@@ -118,6 +72,52 @@ Run tests:
 
 ```bash
 uv run pytest
+```
+
+---
+
+## Pipeline commands
+
+A [Makefile](Makefile) orchestrates the full end-to-end flow.
+
+| Command | What it does |
+|---|---|
+| `make pipeline` | Full run: extract, preprocess, train, evaluate |
+| `make extract` | Pull fresh data from Supabase |
+| `make preprocess` | Clean and engineer features |
+| `make train` | XGBoost with Optuna HPO (full budget) |
+| `make train-quick` | XGBoost with 10 Optuna trials |
+| `make train-autogluon` | AutoGluon ensemble (1h default) |
+| `make train-autogluon-quick` | AutoGluon with 10 min time limit |
+| `make evaluate` | Validation metrics and SHAP plots |
+| `make predict INPUT=path/to/csv` | Batch inference on new domains |
+| `make test` | Run unit tests |
+
+---
+
+## Project layout
+
+```
+src/backlink_pricing_model/
+├── core/           # shared types and config
+├── preprocessing/  # data cleaning and feature engineering
+├── modeling/       # XGBoost, LightGBM, AutoGluon wrappers
+├── analysis/       # feature selection and SHAP
+├── visualization/  # plotting helpers
+└── utils/          # misc
+
+scripts/
+├── data_pipeline/  # Supabase extraction entrypoint
+├── preprocess.py   # cleaning and feature engineering
+├── train.py        # XGBoost and LightGBM with Optuna HPO
+├── train_autogluon.py
+├── evaluate.py
+└── predict.py
+
+notebooks/          # EDA, feature engineering, modeling walkthroughs
+configs/            # YAML config for preprocessing and training
+data/               # raw and processed dataset snapshots
+models/             # saved model artifacts
 ```
 
 ---
