@@ -6,7 +6,36 @@ The Backlink Pricing Model is a professional-grade machine learning pipeline des
 
 ## Overview and Valuation Logic
 
-This model aims to standardize how we price external placements by processing several key domain quality signals into a unified prediction. The valuation process considers multiple dimensions of a domain's health, including **authority metrics** like Domain Rating (DR) and Trust Flow (TF), as well as **estimated organic traffic** which provides a proxy for real-world visibility. Beyond these core metrics, the model also accounts for contextual factors such as the Top-Level Domain (TLD) and niche relevance, while identifying temporal trends through historical acquisition dates to ensure that our pricing remains accurate as market conditions evolve.
+This model aims to standardize how we price external placements by processing several key domain quality signals into a unified prediction.
+
+```mermaid
+flowchart TD
+    S1["1 Data Extraction<br>Pull raw SEO metrics from Supabase"]
+    S2["2 Feature Engineering<br>Clean and Transform into ML features"]
+    S3["3 Model Selection<br>Train AutoGluon and XGBoost and LightGBM"]
+    S4["4 Performance Evaluation<br>Validation metrics and SHAP analysis"]
+    S5["5 Deployment<br>Inference and Valuation report"]
+
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+    S4 -.-> S2
+
+    classDef prepStyle fill:#7E7AE6,stroke:#3D3270,stroke-width:2px,color:#FFFFFF
+    classDef analysisStyle fill:#3A5CED,stroke:#18407F,stroke-width:2px,color:#FFFFFF
+    classDef decisionStyle fill:#85A2FF,stroke:#18407F,stroke-width:2px,color:#FFFFFF
+    classDef validationStyle fill:#82E5E8,stroke:#1C8BA5,stroke-width:2px,color:#FFFFFF
+    classDef documentationStyle fill:#C2A9FF,stroke:#3D3270,stroke-width:2px,color:#FFFFFF
+
+    class S1 prepStyle
+    class S2 analysisStyle
+    class S3 decisionStyle
+    class S4 validationStyle
+    class S5 documentationStyle
+```
+
+The valuation process considers multiple dimensions of a domain's health, including **authority metrics** like Domain Rating (DR) and Trust Flow (TF), as well as **estimated organic traffic** which provides a proxy for real-world visibility. Beyond these core metrics, the model also accounts for contextual factors such as the Top-Level Domain (TLD) and niche relevance, while identifying temporal trends through historical acquisition dates to ensure that our pricing remains accurate as market conditions evolve.
 
 ---
 
