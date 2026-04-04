@@ -10,11 +10,11 @@ This model aims to standardize how we price external placements by processing se
 
 ```mermaid
 flowchart TD
-    S1["1 Data Extraction<br>Pull raw SEO metrics from Supabase"]
-    S2["2 Feature Engineering<br>Clean and Transform into ML features"]
-    S3["3 Model Selection<br>Train AutoGluon and XGBoost and LightGBM"]
-    S4["4 Performance Evaluation<br>Validation metrics and SHAP analysis"]
-    S5["5 Deployment<br>Inference and Valuation report"]
+    S1["Data Extraction<br>Pull raw SEO metrics from Supabase"]
+    S2["Feature Engineering<br>Clean and Transform into ML features"]
+    S3["Model Selection<br>Train AutoGluon and XGBoost and LightGBM"]
+    S4["Performance Evaluation<br>Validation metrics and SHAP analysis"]
+    S5["Deployment<br>Inference and Valuation report"]
 
     S1 --> S2
     S2 --> S3
