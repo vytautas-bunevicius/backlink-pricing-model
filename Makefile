@@ -17,6 +17,9 @@ setup: ## Install all dependencies (core + dev + notebook + extraction + autoglu
 extract: ## Extract raw data from Supabase to data/raw/
 	$(PYTHON) -m scripts.data_pipeline.main
 
+sample: ## Generate a synthetic sample.parquet for public reproduction (no Supabase needed)
+	$(PYTHON) -m scripts.generate_sample --output data/raw/sample.parquet
+
 preprocess: ## Clean and feature-engineer raw data
 	$(PYTHON) -m scripts.preprocess --config $(CONFIG_PREPROCESS)
 

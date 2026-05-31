@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from backlink_pricing_model.core.models.visualization import PlotConfig
+from backlink_pricing_model.core.schemas.visualization import PlotConfig
 from backlink_pricing_model.visualization.plots_style import (
     BASE_LAYOUT,
     FONT_SIZE_TICK,

@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from backlink_pricing_model.core.models.visualization import PlotConfig
+from backlink_pricing_model.core.schemas.visualization import PlotConfig
 from backlink_pricing_model.visualization.plots_style import (
     BASE_LAYOUT,
     CATEGORICAL_PALETTE,

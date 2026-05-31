@@ -85,6 +85,7 @@ A [Makefile](Makefile) orchestrates the full end-to-end flow.
 |---|---|
 | `make pipeline` | Full run: extract, preprocess, train, evaluate |
 | `make extract` | Pull fresh data from Supabase |
+| `make sample` | Generate a synthetic `data/raw/sample.parquet` (no Supabase needed) |
 | `make preprocess` | Clean and engineer features |
 | `make train` | XGBoost with Optuna HPO (full budget) |
 | `make train-quick` | XGBoost with 10 Optuna trials |
@@ -127,7 +128,9 @@ models/             # saved model artifacts
 
 ### Data source
 
-Backlink placement records stored in Supabase, exported as `data/raw/backlinks.parquet` by `make extract`. Each row is one placement with a known final price and the SEO metrics of the target domain at time of purchase. The required schema is defined in [core/models/preprocessing.py](src/backlink_pricing_model/core/models/preprocessing.py).
+Backlink placement records stored in Supabase, exported as `data/raw/backlinks.parquet` by `make extract`. Each row is one placement with a known final price and the SEO metrics of the target domain at time of purchase. The required schema is defined in [core/schemas/preprocessing.py](src/backlink_pricing_model/core/schemas/preprocessing.py).
+
+The production dataset is private. To reproduce the pipeline without credentials, run `make sample` to generate a 5,000-row synthetic dataset drawn from a known log-linear price model with realistic noise and missingness. Metrics trained on the synthetic sample are illustrative only — they exist to prove the pipeline runs, not to claim model performance.
 
 To replicate the model you need a Parquet or CSV file with at least these columns:
 
